@@ -11,7 +11,7 @@ use lib './lib';
  
 BEGIN { $| = 1; print "1..3\n"; }
 END {print "not ok 1\n" unless $loaded;}
-use Math::Interpolate qw(interpolate);
+use Math::Polynomial qw(interpolate);
 $loaded = 1;
 print "ok 1\n";
  
@@ -50,7 +50,7 @@ print "ok 2 (interpolate)\n";
 
 # Test that the interpolation method works with zero points.
 
-my $polynomial = Math::Interpolate::interpolate(0 => 0, .5 => .5, 1 => 1);
+my $polynomial = interpolate(0 => 0, .5 => .5, 1 => 1);
 
 if ($polynomial->degree() == 1
     && $polynomial->coeff(0) == 0 

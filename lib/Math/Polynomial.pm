@@ -1,5 +1,5 @@
 
-# Copyright (C) 1997 Matz Kindahl. All rights reserved.
+# Copyright 1997 Matz Kindahl. All rights reserved.
 #
 # This program is free software; you can redistribute it and/or
 # modify it under the same terms as Perl itself.
@@ -11,9 +11,9 @@ require Exporter;
 @ISA = qw(Exporter);
 @EXPORT = ();
 # Class methods may be exported.
-@EXPORT_OK = qw(quotrem verbose configure);
+@EXPORT_OK = qw(quotrem verbose configure interpolate);
 
-$VERSION = 0.02;
+$VERSION = 0.03;
 
 use Carp;
 use strict;
@@ -37,6 +37,8 @@ Math::Polynomial - Perl class for working with polynomials.
 
     print "$P / $Q = ", $P / $Q, "\n";
 
+    my $polynomial = Math::Polynomial::interpolate(1 => 5, 2 => 12, 3 => 6);
+
 =head1 DESCRIPTION
 
 This module implements single variable polynomials using arrays. It also
@@ -52,7 +54,7 @@ use overload
     '*' => \&times,
     '/' => sub { (&quotrem)[0] },
     '%' => sub { (&quotrem)[1] },
-    "\"\"" => \&to_string;
+    '""' => \&to_string;
 
 =head1 CONSTRUCTOR
 
@@ -93,7 +95,14 @@ variables used by the class.
 
 =item PLUS
 
-The string inserted as a plus sign between terms. Default is C<' + '>.
+The string inserted as a plus sign between terms. 
+Default is C<' + '>.
+
+=item MINUS
+
+The string inserted as a minus sign between terms. If the first
+coefficient is negative, this string without spaces is used as prefix.
+Default is C<' - '>. 
 
 =item TIMES
 
@@ -113,7 +122,11 @@ The string used as variable in the polynom. Default is C<'$X'>.
 
 =cut
 
-my %CONFIG = (PLUS => ' + ', TIMES => '*', POWER => '**', VARIABLE => '$X');
+my %CONFIG = (PLUS => ' + ', 
+	      MINUS => ' - ', 
+	      TIMES => '*', 
+	      POWER => '**', 
+	      VARIABLE => '$X');
 
 sub configure (\@@) {
     my $self = shift;
@@ -141,7 +154,7 @@ sub quotrem {
     my $left = shift;
     my $right = shift;
 
-    # If divided by a constant, turn it into a polynomial
+    # If divided by a constant, turn the constant into a polynomial.
     $right = ref($right) ? $right : Math::Polynomial->new($right);
 
     # Swap terms if called in reverse order.
@@ -390,8 +403,6 @@ polynomial on the right (called the denominator) and returns the
 remainder of the division. If the degree of the denominator is greater
 than the degree of numerator, the numerator will be returned.
 
-=cut
-
 =item String conversion.
 
 If verbose is turned on, the polynomial will be converted to a string
@@ -413,14 +424,27 @@ sub to_string {
 
     if ($VERBOSE) {
 	my @terms;
-	my $exp = $self->degree;
+	my $exp = @$self - 1;
 	foreach (@$self) {
+	    # If the coefficient is not zero...
 	    if ($_ != 0) {
-		my $term = $_ == 1 ? "" : $_;
+		# ... we're going to build a term.
+		my $term;
+		# First, we add a plus or a minus, depending on the
+		# sign of the coefficient, then we add the absolute
+		# value of the coefficient. 
+		if ($_ < 0) {
+		    push(@terms, $CONFIG{MINUS});
+		    $term = -$_ unless $_ == -1 && $exp != 0;
+		} else {
+		    push(@terms, $CONFIG{PLUS});
+		    $term = $_ unless $_ == 1 && $exp != 0;
+		}
 
-		$term .= $CONFIG{TIMES} if $exp > 0 && $_ != 1;
-		
-		if ($exp > 0) {
+		# If the exponent is not zero, we append the
+		# equivalent of '*x^e' to the result.
+		if ($exp != 0) {
+		    $term .= $CONFIG{TIMES} if $_ != 1;
 		    $term .= $CONFIG{VARIABLE};
 		    $term .= $CONFIG{POWER}.$exp if $exp > 1;
 		}
@@ -428,10 +452,71 @@ sub to_string {
 	    }
 	    $exp--;
 	}
-	return join($CONFIG{PLUS}, @terms);
+
+	if ($terms[0] eq $CONFIG{PLUS}) {
+	    # If there's a plus first, drop it.
+	    shift(@terms);
+	} else {
+	    # Otherwise, remove any spaces around the first minus.
+	    $terms[0] =~ tr/ //d;
+	}
+	return join('', @terms);
     } else {
 	return $self->dump();
     }
+}
+
+=head1 SUBROUTINES
+
+=over 4
+
+=item interpolate(I<x> => I<y>, ...)
+
+Given a set of pairs of I<x> and I<y> values, C<interpolate> will
+return a polynomial which interpolates those values. The data points
+are supplied as a list of alternating I<x> and I<y> values.
+
+The degree of the resulting polynomial will be one less than the
+number of pairs, e.g. the polynomial in the synopsis will be of
+degree 2.
+
+The interpolation is done using B<Lagrange's formula> and the
+implementation runs in I<O(n^2)>, where I<n> is the number of pairs
+supplied to C<interpolate>.
+
+Please note that it is a I<bad idea> to use interpolation for
+extrapolation, i.e. if you are interpolating a polynomial for
+I<x>-values in the range 0 to 10, then you may get terrible results if
+you try to predict I<y>-values outside this range. This is true
+especially if the true function is not a polynomial.
+
+=cut
+
+# Matching extra ' above.
+
+sub interpolate {
+    my(@x,@y);
+    my($x,$y);
+
+    while (defined ($x = shift) && defined ($y = shift)) {
+	unshift(@x,$x);
+	unshift(@y,$y);
+    }
+
+    # Declare and compute the numerator
+    my $numerator = Math::Polynomial->new(1);
+    foreach (@x) { $numerator->mul1c($_) }
+    
+    # Declare and compute the polynomial using Lagrange's formula (see
+    # separate paper.
+    my $result = Math::Polynomial->new(0);
+    foreach (@x) {
+	my $temp = $numerator->clone();
+	$temp->div1c($_);
+	my $constant = shift(@y) / $temp->eval($_);
+	$result += $constant * $temp;
+    }
+    return $result;
 }
 
 =head1 INTERNAL METHODS
@@ -493,9 +578,13 @@ sub div1c {
     pop(@$self);
 }
 
+=head1 SEE ALSO
+
+I<A Perl Module for Polynomial Interpolation>
+
 =head1 COPYRIGHT
 
-Copyright (C) 1997 Matz Kindahl. All rights reserved.
+Copyright 1997 Matz Kindahl. All rights reserved.
 
 This program is free software; you can redistribute it and/or modify
 it under the same terms as Perl itself.

@@ -1,0 +1,29 @@
+			  -*- Mode: Text -*-
+
+		    Math::Polynomial Version 0.03
+		    -----------------------------
+
+- Added more text about interpolation in general and Math::Polynomial
+  specifically to the distribution.
+
+- Fixed a bug where the last constant was omitted if it was one. This
+  bug was reported independently by Sergey V. Kolychev, John Hurst,
+  and Jeffrey S. Haemer (Minolta-QMS).
+
+- By a suggestion from Jeffrey S. Haemer (Minolta-QMS) I also changed
+  the verbose format slightly to print 'x + -1' as 'x - 1' (and
+  similarly for all negative coefficients). For the special case,
+  where the first coefficient is negative, the minus sign is still
+  printed as if it was part of the coefficient; e.g., '-3*x + 4' is
+  still printed as '-3*x + 4'.
+
+- By suggestion from John Gamble I moved Math::Interpolate to inside
+  the Math::Polynomial package---the subroutine is very small and
+  tightly coupled to the Math::Polynomial package.
+
+
+		    Math::Polynomial Version 0.02
+		    -----------------------------
+
+Fixed a bug that caused erroneous behaviour when 0 was used in the
+interpolation routine.

@@ -9,10 +9,10 @@
  
 use lib './lib';
  
-BEGIN { $| = 1; print "1..9\n"; }
+BEGIN { $| = 1; print "1..10\n"; }
 END {print "not ok 1\n" unless $loaded;}
+
 use Math::Polynomial;
-use Math::Interpolate qw(interpolate);
 $loaded = 1;
 print "ok 1\n";
  
@@ -46,13 +46,24 @@ print "ok 5 (tidy)\n";
 
 Math::Polynomial->verbose(1);
 
-print "not (since $P is not correct)" 
-    unless "$P" eq '3*$X**2 + 2*$X + -3';
+$P = Math::Polynomial->new(3, 2, -3);
+if ("$P" ne '3*$X**2 + 2*$X - 3') {
+    print "not ('$P' is not correct)";
+} else {
+    # Example supplied by Sergey that failed before.
+    my $a = new Math::Polynomial(1,1);
+    $a->verbose(1);
+    
+    if ("$a" ne '$X + 1') {
+	print "not ('$a' is not correct)";
+    }
+}
 print "ok 6 (stringify)\n";
 
 Math::Polynomial->configure(VARIABLE => 'X', POWER => '^');
 
-print "not (since $P is not correct)" unless "$P" eq '3*X^2 + 2*X + -3';
+print "not (since $P is not correct)" 
+    unless "$P" eq '3*X^2 + 2*X - 3';
 print "ok 7 (stringify)\n";
 
 foreach (1..20) {
@@ -89,4 +100,23 @@ TEST9: while ($cnt-- > 0) {
 }
 print "ok 9 (plus)\n";
 
-	    
+# Added test 10 to check for bug reported independently by  
+# Sergey V. Kolychev, John Hurst, and Jeffrey S. Haemer
+# (Minolta-QMS).
+
+TEST10: {
+    $P = Math::Polynomial->new(1,-1);
+    goto BAD10 unless "$P" eq 'X - 1';
+    $P = Math::Polynomial->new(1,1);
+    goto BAD10 unless "$P" eq 'X + 1';
+    
+    goto GOOD10;
+
+  BAD10:
+    print "not ok 10\n";
+    goto TEST11;
+  GOOD10:
+    print "ok 10\n";
+}
+
+TEST11:
