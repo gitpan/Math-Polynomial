@@ -1,7 +1,7 @@
 MANIFEST
 Makefile.PL
-Math/Polynomial.pm
-Math/Interpolate.pm
+lib/Math/Polynomial.pm
+lib/Math/Interpolate.pm
 README
 Release
 e/interpolate.plot

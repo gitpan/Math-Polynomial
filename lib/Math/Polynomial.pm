@@ -13,7 +13,7 @@ require Exporter;
 # Class methods may be exported.
 @EXPORT_OK = qw(quotrem verbose configure);
 
-$VERSION = 0.01;
+$VERSION = 0.02;
 
 use Carp;
 use strict;
@@ -120,7 +120,7 @@ sub configure (\@@) {
     my $class = ref($self) || $self;
     my($key, $value);
 
-    while (($key = shift) && ($value = shift)) {
+    while (defined ($key = shift) && defined ($value = shift)) {
 	$CONFIG{$key} = $value;
     }
 }

@@ -4,6 +4,12 @@
 # This program is free software; you can redistribute it and/or
 # modify it under the same terms as Perl itself.
 
+=head1 NAME
+
+Math::Interpolate - Interpolation of data into a polynomial.
+
+=cut
+
 package Math::Interpolate;
 
 require Exporter;
@@ -20,11 +26,33 @@ use Math::Polynomial;
 # Polynomial package with some dedicated methods to do these things
 # later.
 
+=head1 SYNOPSIS
+
+    use Math::Interpolate qw(interpolate);
+
+    my $polynomial = interpolate(1 => 5, 2 => 12, 3 => 6);
+
+=head1 DESCRIPTION
+
+Given a set of pairs of I<x> and I<y> values, C<interpolate> will
+return a polynomial which interpolates those values. The data points
+are supplied as a list of alternating I<x> and I<y> values.
+
+The degree of the resulting polynomial will be one less than the
+number of pairs, e.g. the polynomial in the synopsis will be of
+degree 2.
+
+The interpolation is done using B<Lagrange's formula> and the
+implementation runs in I<O(n^2)>, where I<n> is the number of pairs
+supplied to C<interpolate>.
+
+=cut
+
 sub interpolate {
     my(@x,@y);
     my($x,$y);
 
-    while (($x = shift) && ($y = shift)) {
+    while (defined ($x = shift) && defined ($y = shift)) {
 	unshift(@x,$x);
 	unshift(@y,$y);
     }
@@ -46,31 +74,6 @@ sub interpolate {
 }
 
 1;
-
-__END__
-=head1 NAME
-
-Math::Interpolate - Interpolation of data into a polynomial.
-
-=head1 SYNOPSIS
-
-    use Math::Interpolate qw(interpolate);
-
-    my $polynomial = interpolate(1 => 5, 2 => 12, 3 => 6);
-
-=head1 DESCRIPTION
-
-Given a set of pairs of I<x> and I<y> values, C<interpolate> will
-return a polynomial which interpolates those values. The data points
-are supplied as a list of alternating I<x> and I<y> values.
-
-The degree of the resulting polynomial will be one less than the
-number of pairs, e.g. the polynomial in the synopsis will be of
-degree 2.
-
-The interpolation is done using B<Lagrange's formula> and the
-implementation runs in I<O(n^2)>, where I<n> is the number of pairs
-supplied to C<interpolate>.
 
 =head1 CAVEAT
 
