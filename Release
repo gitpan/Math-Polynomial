@@ -1,0 +1,25 @@
+Announcing the release of Perl Module Math::Polynomial and
+Math::Interpolate Version 0.01
+
+Math::Polynomial  - Algebra on polynomials
+Math::Interpolate - Interpolate data using a polynomial
+
+This package provides operators to preform algebra on polynomials. The
+operators +,-,*,/, and % are all implemented, as are evaluation of
+polynomials.
+
+The package Math::Interpolate provides polynom interpolation using
+Lagrange's formula, given a set of data points.
+
+These two packages are distributed together, since Math::Interpolate
+is quite small.
+
+Module Entry
+
+6) Data Types and Data Type Utilities (see also Database Interfaces)
+
+Name           DSLI  Description                                  Info
+-----------    ----  -------------------------------------------- -----
+Math::
+::Polynomial   RdpO  Polynomials as objects
+::Interpolate  Rdp0  Polynomial interpolation of data

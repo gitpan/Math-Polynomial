@@ -1,0 +1,11 @@
+MANIFEST
+Makefile.PL
+Math/Polynomial.pm
+Math/Interpolate.pm
+README
+Release
+e/interpolate.plot
+e/test.gplot
+lagrange.tex
+t/basic.t
+t/interpolate.t
