@@ -1,7 +1,47 @@
 			  -*- Mode: Text -*-
 
+		    Math::Polynomial Version 0.04
+		    -----------------------------
+
+- Release date: 2007-07-12.
+
+- New maintainer: Martin Becker.
+
+- Bugfix [rt.cpan.org #4788] (reported 2003 by prospective maintainer):
+  Method tidy() looped endlessly on zero polynomials.
+
+- Bugfix: Crashed on adding a constant.
+
+- Bugfix: Crashed on negating via overloaded unary minus.
+
+- Bugfix: Division of polynomials of equal degree gave wrong results.
+
+- Bugfix: Division crashed with non-"tidy" polynomials.
+
+- Bugfix: Division failed to catch zero denominator.
+
+- Bugfix: Verbose stringification produced lots of warnings under -W.
+
+- Added more test cases.
+
+- Renamed example directory, fixed imports and added table of contents
+  there.
+
+- Added some metadata to Makefile.PL.
+
+- Added documentation of exportable subroutines, moved quotrem to
+  subroutines section, clarified some definitions.
+
+- Moved all imports to top of the module.
+
+- Added more standard sections to POD, like VERSION, DIAGNOSTICS, LICENCE.
+
+- Added development status notice to README.
+
 		    Math::Polynomial Version 0.03
 		    -----------------------------
+
+- Release date: 2001-02-23.
 
 - Added more text about interpolation in general and Math::Polynomial
   specifically to the distribution.
@@ -25,5 +65,15 @@
 		    Math::Polynomial Version 0.02
 		    -----------------------------
 
-Fixed a bug that caused erroneous behaviour when 0 was used in the
-interpolation routine.
+- Release date: 1998-08-13.
+
+- Fixed a bug that caused erroneous behaviour when 0 was used in the
+  interpolation routine.
+
+		    Math::Polynomial Version 0.01
+		    -----------------------------
+
+- Release date: 2007-09-11.
+
+- Initial release.
+

@@ -1,4 +1,4 @@
-use Math::Interpolate::Polynomial qw(interpolate);
+use Math::Polynomial qw(interpolate);
 
 # Read the contents of 'sample.dat'
 open(FD, "sample.dat") or die "open: $!\n";

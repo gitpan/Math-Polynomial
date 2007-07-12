@@ -1,27 +1,34 @@
 #                              -*- Mode: Perl -*- 
+# Copyright (c) 2007 Martin Becker. All rights reserved.
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the same terms as Perl itself.
+
 # Before `make install' is performed this script should be runnable with
 # `make test'. After `make install' it should work as `perl test.pl'
- 
+
 ######################### We start with some black magic to print on failure.
- 
-# Change 1..1 below to 1..last_test_to_print .
-# (It may become useful if the test is moved to ./t subdirectory.)
- 
-use lib './lib';
- 
-BEGIN { $| = 1; print "1..10\n"; }
+
+use strict;
+use vars qw($loaded);
+
+BEGIN { $| = 1; print "1..60\n"; }
 END {print "not ok 1\n" unless $loaded;}
 
 use Math::Polynomial;
 $loaded = 1;
 print "ok 1\n";
- 
+
 ######################### End of black magic.
- 
-# Insert your test code below (better if it prints "ok 13"
-# (correspondingly "not ok 13") depending on the success of chunk 13
-# of the test code):
- 
+
+sub check_coeff {
+    my ($number, $poly, @coeff) = @_;
+    my $ok =
+	$poly->degree == $#coeff &&
+	!grep { $poly->coeff($_) != $coeff[$_] } 0..$#coeff;
+    print !$ok && 'not ', "ok $number ($poly === (@coeff))\n";
+}
+
 # This is the polynomial 3x^2 + 2x - 3
 my $P = Math::Polynomial->new(3, 2, -3);
 print "ok 2 (creating)\n";	# Ain't much that can go wrong
@@ -120,3 +127,163 @@ TEST10: {
 }
 
 TEST11:
+
+my $p1 = Math::Polynomial->new(1, -2, 1);
+check_coeff 11, $p1, 1, -2, 1;
+
+my $p2 = Math::Polynomial->new(2, 0);
+check_coeff 12, $p2, 0, 2;
+
+my $p3;
+
+$p3 = $p1 + $p2;
+check_coeff 13, $p3, 1, 0, 1;
+
+$p3 = $p2 + $p1;
+check_coeff 14, $p3, 1, 0, 1;
+
+$p3 = $p1 + -1;
+check_coeff 15, $p3, 0, -2, 1;
+
+$p3 = -1 + $p1;
+check_coeff 16, $p3, 0, -2, 1;
+
+$p3 = $p1 - $p2;
+check_coeff 17, $p3, 1, -4, 1;
+
+$p3 = $p2 - $p1;
+check_coeff 18, $p3, -1, 4, -1;
+
+$p3 = $p1 - 1;
+check_coeff 19, $p3, 0, -2, 1;
+
+$p3 = 1 - $p1;
+check_coeff 20, $p3, 0, 2, -1;
+
+$p3 = $p1 - $p1;
+check_coeff 21, $p3;
+
+$p3->tidy;
+check_coeff 22, $p3;
+
+$p3 = $p1 - $p1->clone;
+check_coeff 23, $p3;
+
+$p3 = -$p1;
+check_coeff 24, $p3, -1, 2, -1;
+
+my $q1 = $p1 * $p2;
+check_coeff 25, $q1, 0, 2, -4, 2;
+
+my $q2 = 1 - $p1 * $p2;
+check_coeff 26, $q2, 1, -2, 4, -2;
+
+$p3 = 0.5 * $q1;
+check_coeff 27, $p3, 0, 1, -2, 1;
+
+$p3 = $q1 * 0.5;
+check_coeff 28, $p3, 0, 1, -2, 1;
+
+$p3 = $q2 / $p1;
+check_coeff 29, $p3, 0, -2;
+
+$p3 = $q2 / $q1;
+check_coeff 30, $p3, -1;
+
+$p3 = $q2 / -2;
+check_coeff 31, $p3, -0.5, 1, -2, 1;
+
+$p3 = -2 / $q2;
+check_coeff 32, $p3;
+
+my $q3 = $q1 + Math::Polynomial->new(-2, 0, 0, 0);
+print $q3->size != 4 && 'not ', "ok 33 (untidy size)\n";
+print $q3->degree != 2 && 'not ', "ok 34 (untidy degree)\n";
+check_coeff 35, $q3, 0, 2, -4;
+
+$p3 = $q2 / $q3;
+check_coeff 36, $p3, -0.75, 0.5;
+
+my $z0 = Math::Polynomial->new();
+check_coeff 37, $z0;
+
+my $z1 = Math::Polynomial->new(0);
+check_coeff 38, $z1;
+
+my $msg;
+
+$p3 = eval { $q2 / $z0 };
+$msg = $@;
+print !$msg && 'not ', "ok 39 (zero division)\n";
+print $msg !~ /division by zero/ && 'not ', "ok 40 (zero division)\n";
+
+$p3 = eval { $q2 / $z1 };
+$msg = $@;
+print !$msg && 'not ', "ok 41 (zero division)\n";
+print $msg !~ /division by zero/ && 'not ', "ok 42 (zero division)\n";
+
+$p3 = $z0 / $q3;
+check_coeff 43, $p3;
+
+$p3 = $z1 / $q3;
+check_coeff 44, $p3;
+
+$p3 = $q2 % $p1;
+check_coeff 45, $p3, 1;
+
+$p3 = $q2 % $q1;
+check_coeff 46, $p3, 1;
+
+$p3 = $q2 % -2;
+check_coeff 47, $p3;
+
+$p3 = -2 % $q2;
+check_coeff 48, $p3, -2;
+
+$p3 = $q2 % $q3;
+check_coeff 49, $p3, 1, -0.5;
+
+$p3 = eval { $q2 % $z0 };
+$msg = $@;
+print !$msg && 'not ', "ok 50 (zero division)\n";
+print $msg !~ /division by zero/ && 'not ', "ok 51 (zero division)\n";
+
+$p3 = eval { $q2 % $z1 };
+$msg = $@;
+print !$msg && 'not ', "ok 52 (zero division)\n";
+print $msg !~ /division by zero/ && 'not ', "ok 53 (zero division)\n";
+
+$p3 = $z0 % $q3;
+check_coeff 54, $p3;
+
+$p3 = $z1 % $q3;
+check_coeff 55, $p3;
+
+my ($b, $c);
+
+$c = eval { $q3->coeff(-1) };
+$msg = $@;
+print !$msg && 'not ', "ok 56 (coeff index)\n";
+print $msg !~ /exponent/ && 'not ', "ok 57 (coeff index)\n";
+
+$c = eval { $q3->coeff(10) };
+$msg = $@;
+print !$msg && 'not ', "ok 58 (coeff index)\n";
+print $msg !~ /exponent/ && 'not ', "ok 59 (coeff index)\n";
+
+$c = eval { $q3->coeff(3) };
+$msg = $@;
+$b = !$@ && defined($c) && 0 == $c;
+print !$b && 'not ', "ok 60 (coeff index)\n";
+
+__END__
+p1 = x^2 -2x +1
+p2 = 2x
+q1 = 2x^3 -4x^2 +2x
+q2 = -2x^3 +4x^2 -2x +1
+q3 = -4x^2 +2x
+
+-2x^3 +4x^2 -2x +1 = (x^2 -2x +1) * (-2x) + (1)
+-2x^3 +4x^2 -2x +1 = (2x^3 -4x^2 +2x) * (-1) + (1)
+-2x^3 +4x^2 -2x +1 = (-2) * (x^3 -2x^2 +x -0.5) + (0)
+-2x^3 +4x^2 -2x +1 = (-4x^2 +2x) * (0.5x -0.75) + (-0.5x +1)

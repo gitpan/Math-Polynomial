@@ -1,17 +1,17 @@
-Announcing the release of Perl Module Math::Polynomial Version 0.03
+Announcing the release of Perl Module Math::Polynomial Version 0.04
 
-Math::Polynomial  - Algebra on polynomials
+Math::Polynomial  - Arithmetic on single-variable polynomials
 
-This package provides operators to preform algebra on polynomials. The
-operators +,-,*,/, and % are all implemented, as are evaluation of
-polynomials. In addition, the package provides polynom interpolation
+This package provides operators to perform arithmetic on polynomials. The
+operators +,-,*,/, and % are all implemented, as is evaluation of
+polynomials. In addition, the package provides interpolation polynomials
 using Lagrange's formula, given a set of data points.
 
 Module Entry
 
 6) Data Types and Data Type Utilities (see also Database Interfaces)
 
-Name           DSLI  Description                                  Info
------------    ----  -------------------------------------------- -----
+Name           DLSIP  Description                                  Info
+-----------    -----  -------------------------------------------- -----
 Math::
-::Polynomial   RdpO  Polynomials as objects
+::Polynomial   bdpOp  Polynomials as objects

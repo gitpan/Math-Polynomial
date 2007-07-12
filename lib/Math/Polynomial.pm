@@ -1,26 +1,37 @@
-
-# Copyright 1997 Matz Kindahl. All rights reserved.
+# Copyright (c) 2007 Martin Becker. All rights reserved.
 #
-# This program is free software; you can redistribute it and/or
+# This module is free software; you can redistribute it and/or
 # modify it under the same terms as Perl itself.
 
 package Math::Polynomial;
 
-require Exporter;
-
-@ISA = qw(Exporter);
-@EXPORT = ();
-# Class methods may be exported.
-@EXPORT_OK = qw(quotrem verbose configure interpolate);
-
-$VERSION = 0.03;
-
-use Carp;
+use 5.005;
 use strict;
+use base qw(Exporter);
+use vars qw($VERSION @EXPORT_OK);
+use Carp;
+
+use overload
+    '+' => \&plus,
+    '-' => \&minus,
+    'neg' => \&neg,
+    '*' => \&times,
+    '/' => sub { (&quotrem)[0] },
+    '%' => sub { (&quotrem)[1] },
+    '""' => \&to_string;
+
+$VERSION = '0.04';
+
+# plain subroutines may be exported.
+@EXPORT_OK = qw(quotrem interpolate);
 
 =head1 NAME
 
 Math::Polynomial - Perl class for working with polynomials.
+
+=head1 VERSION
+
+This document describes Math::Polynomial version 0.04.
 
 =head1 SYNOPSIS
 
@@ -45,17 +56,6 @@ This module implements single variable polynomials using arrays. It also
 implements some useful functionality when working with polynomials, such
 as adding, multiplication, etc.
 
-=cut
-
-use overload
-    '+' => \&plus,
-    '-' => \&minus,
-    'neg' => \&negate,
-    '*' => \&times,
-    '/' => sub { (&quotrem)[0] },
-    '%' => sub { (&quotrem)[1] },
-    '""' => \&to_string;
-
 =head1 CONSTRUCTOR
 
 The following constructors exist to create new polynomials.
@@ -70,10 +70,10 @@ X**0) is the last one in the list.
 
 =cut
 
-sub new ($@) {
+sub new {
     my $class = shift;
     my $self = [@_];
-    bless $self,$class;
+    return bless $self, $class;
 }
 
 =back
@@ -95,14 +95,14 @@ variables used by the class.
 
 =item PLUS
 
-The string inserted as a plus sign between terms. 
+The string inserted as a plus sign between terms.
 Default is C<' + '>.
 
 =item MINUS
 
 The string inserted as a minus sign between terms. If the first
 coefficient is negative, this string without spaces is used as prefix.
-Default is C<' - '>. 
+Default is C<' - '>.
 
 =item TIMES
 
@@ -122,65 +122,18 @@ The string used as variable in the polynom. Default is C<'$X'>.
 
 =cut
 
-my %CONFIG = (PLUS => ' + ', 
-	      MINUS => ' - ', 
-	      TIMES => '*', 
-	      POWER => '**', 
+my %CONFIG = (PLUS => ' + ',
+	      MINUS => ' - ',
+	      TIMES => '*',
+	      POWER => '**',
 	      VARIABLE => '$X');
 
-sub configure (\@@) {
-    my $self = shift;
-    my $class = ref($self) || $self;
-    my($key, $value);
+sub configure {
+    my $class = shift;
+    my ($key, $value);
 
     while (defined ($key = shift) && defined ($value = shift)) {
 	$CONFIG{$key} = $value;
-    }
-}
-
-=item quotrem(I<numerator>,I<denominator>)
-
-This method computes the quotient and the remainder when dividing
-I<numerator> by I<denominator> and returns a list
-(I<quotient>,I<remainder>). It is used by the operators C</> and C<%>.
-
-It uses the B<Euclidian algorithm> for division, hence we have a
-complexity of I<O(n*m)> where I<n> and I<m> are the degrees of the
-polynomials.
-
-=cut
-
-sub quotrem {
-    my $left = shift;
-    my $right = shift;
-
-    # If divided by a constant, turn the constant into a polynomial.
-    $right = ref($right) ? $right : Math::Polynomial->new($right);
-
-    # Swap terms if called in reverse order.
-    ($right,$left) = ($left,$right) if $_[0];
-
-    if (@$left > @$right) {
-	my @C = @$left;
-	my @R = splice(@C,0,@$right-1);
-	my(@Q,$C);
-
-	foreach $C (@C) {
-	    push(@R, $C);
-	    my $quote = shift(@R) / $right->[0];
-	    my $i = 1;
-	    foreach (@R) {
-		$_ -= $quote * $right->[$i++];
-	    }
-	    push(@Q, $quote);
-	}
-	return (
-	      Math::Polynomial->new(@Q),
-	      Math::Polynomial->new(@R));
-    } else {
-	return (
-	      Math::Polynomial->new(),
-	      Math::Polynomial->new(@$left));
     }
 }
 
@@ -194,8 +147,7 @@ the polynomial, otherwise a list of coefficients will be returned.
 my $VERBOSE = 0;
 
 sub verbose {
-    my $self = shift;
-    my $class = ref($self) || $self;
+    my $class = shift;
     $VERBOSE = shift;
 }
 
@@ -222,14 +174,14 @@ sub clone {
 
 =item coeff(I<degree>)
 
-This method returns the coefficient for degree I<degree>.
+This method returns the coefficient for x to the power of I<degree>.
 
 =cut
 
 sub coeff {
     my $self = shift;
     my $no = shift;
-    croak "coeff: coefficient out of range "
+    croak "coeff: exponent out of range "
 	unless $no < @$self && $no >= 0;
     return +$self->[@$self - $no - 1];
 }
@@ -238,7 +190,7 @@ sub coeff {
 
 This method returns the degree of the polynomial. The degree of a
 polynomial is the maximum of the degree of terms with non-zero
-coefficients.
+coefficients.  For zero polynomials, B<-1> is returned.
 
 =cut
 
@@ -283,7 +235,7 @@ sub size {
 =item tidy()
 
 This method removes all terms which are redundant, i.e. the
-coefficients where all higher degree coefficients are zero.
+zero coefficients where all higher degree coefficients are also zero.
 
 This method is B<never> called automatically, since it is assumed that
 the programmer knows best when to tidy the polynomial.
@@ -294,7 +246,9 @@ the programmer knows best when to tidy the polynomial.
 
 sub tidy {
     my $self = shift;
-    shift(@$self) while $self->[0] == 0;
+    while (@{$self} && 0 == $self->[0]) {
+	shift @{$self};
+    }
 }
 
 =head1 OPERATORS
@@ -314,11 +268,12 @@ sub plus {
     my $left = shift;
     my $right = shift;
     my $new = Math::Polynomial->new();
-    my $i = @$left;
-    my $j = @$right;
 
     # If adding a constant, turn it into a polynomial
     $right = ref($right) ? $right : Math::Polynomial->new($right);
+
+    my $i = @$left;
+    my $j = @$right;
 
     while ($i > 0 || $j > 0) {
 	unshift(@$new, 0);
@@ -358,6 +313,13 @@ sub minus {
     return $new;
 }
 
+=item - I<polynomial>
+
+Negates a polynomial. The operation is I<O(n)> where I<n> is the degree
+of the polynomial.
+
+=cut
+
 sub neg {
     my $polynomial = shift;
 
@@ -396,12 +358,16 @@ polynomial on the right (called the denominator) and returns the
 quotient. If the degree of the denominator is greater than the degree
 of the numerator, the zero polynomial will be returned.
 
+The denominator must not be the zero polynomial.
+
 =item I<polynomial> % I<polynomial>
 
 Divides the polynomial on the left (called the numerator) with the
 polynomial on the right (called the denominator) and returns the
 remainder of the division. If the degree of the denominator is greater
 than the degree of numerator, the numerator will be returned.
+
+The denominator must not be the zero polynomial.
 
 =item String conversion.
 
@@ -429,10 +395,10 @@ sub to_string {
 	    # If the coefficient is not zero...
 	    if ($_ != 0) {
 		# ... we're going to build a term.
-		my $term;
+		my $term = '';
 		# First, we add a plus or a minus, depending on the
 		# sign of the coefficient, then we add the absolute
-		# value of the coefficient. 
+		# value of the coefficient.
 		if ($_ < 0) {
 		    push(@terms, $CONFIG{MINUS});
 		    $term = -$_ unless $_ == -1 && $exp != 0;
@@ -453,10 +419,10 @@ sub to_string {
 	    $exp--;
 	}
 
-	if ($terms[0] eq $CONFIG{PLUS}) {
+	if (@terms && $terms[0] eq $CONFIG{PLUS}) {
 	    # If there's a plus first, drop it.
 	    shift(@terms);
-	} else {
+	} elsif (@terms) {
 	    # Otherwise, remove any spaces around the first minus.
 	    $terms[0] =~ tr/ //d;
 	}
@@ -469,6 +435,64 @@ sub to_string {
 =head1 SUBROUTINES
 
 =over 4
+
+=item quotrem(I<numerator>,I<denominator>)
+
+This method computes the quotient and the remainder when dividing
+I<numerator> by I<denominator> and returns a list
+(I<quotient>,I<remainder>). It is used by the operators C</> and C<%>.
+
+It uses the standard long division algorithm for polynomials, with a
+complexity of I<O(n*m)> where I<n> and I<m> are the degrees of the
+polynomials.
+
+=cut
+
+sub quotrem {
+    my $left = shift;
+    my $right = shift;
+
+    # If divided by a constant, turn the constant into a polynomial.
+    $right = ref($right) ? $right : Math::Polynomial->new($right);
+
+    # Swap terms if called in reverse order.
+    ($right,$left) = ($left,$right) if $_[0];
+
+    if (@{$right} && 0 == $right->[0]) {
+	$right = $right->clone;
+	$right->tidy;
+    }
+    if (!@{$right}) {
+	croak "division by zero polynomial";
+    }
+    if (@{$left} && 0 == $left->[0]) {
+	$left = $left->clone;
+	$left->tidy;
+    }
+
+    if (@$left >= @$right) {
+	my @C = @$left;
+	my @R = splice(@C,0,@$right-1);
+	my @Q;
+
+	foreach my $C (@C) {
+	    push(@R, $C);
+	    my $quote = shift(@R) / $right->[0];
+	    my $i = 1;
+	    foreach (@R) {
+		$_ -= $quote * $right->[$i++];
+	    }
+	    push(@Q, $quote);
+	}
+	return (
+	      Math::Polynomial->new(@Q),
+	      Math::Polynomial->new(@R));
+    } else {
+	return (
+	      Math::Polynomial->new(),
+	      Math::Polynomial->new(@$left));
+    }
+}
 
 =item interpolate(I<x> => I<y>, ...)
 
@@ -506,7 +530,7 @@ sub interpolate {
     # Declare and compute the numerator
     my $numerator = Math::Polynomial->new(1);
     foreach (@x) { $numerator->mul1c($_) }
-    
+
     # Declare and compute the polynomial using Lagrange's formula (see
     # separate paper.
     my $result = Math::Polynomial->new(0);
@@ -518,6 +542,8 @@ sub interpolate {
     }
     return $result;
 }
+
+=back
 
 =head1 INTERNAL METHODS
 
@@ -541,7 +567,7 @@ sub dump {
 =item mul1c(I<c>)
 
 Multiply the polynomial by I<(x - c)>. Used internally by the
-interpolation package.
+interpolate() function.
 
 =cut
 
@@ -561,7 +587,7 @@ sub mul1c {
 =item div1c(I<c>)
 
 Divide the polynomial by I<(x - c)>. Used internally by the
-interpolation package.
+interpolate() function.
 
 =back
 
@@ -578,16 +604,57 @@ sub div1c {
     pop(@$self);
 }
 
+=head1 EXPORTS
+
+Math::Polynomial exports nothing by default.
+Subroutines that can be exported on demand are:
+
+=over 4
+
+=item quotrem
+
+=item interpolate
+
+=back
+
+=head1 DIAGNOSTICS
+
+Division and modulus operators as well as quotrem() will die on zero
+polynomials as right hand operand.
+
+The coeff() method will die on exponents outside the range from zero up to
+the current internal size of the coefficient vector minus one.  The range
+of allowed exponents will always include the polynomial degree, though.
+
+All other methods are supposed to always be successful.
+
+=head1 CAVEATS
+
+Most methods do not actively check their parameters.  Arithmetic is
+carried out using Perl's builtin numeric data types and therefore prone
+to rounding errors and occasional floating point exceptions.
+
 =head1 SEE ALSO
 
-I<A Perl Module for Polynomial Interpolation>
+Pages in category I<Polynomials> of Wikipedia.
 
-=head1 COPYRIGHT
+=head1 AUTHORS
 
-Copyright 1997 Matz Kindahl. All rights reserved.
+Currently maintained by Martin Becker E<lt>becker-cpan-mp@cozap.comE<gt>.
 
-This program is free software; you can redistribute it and/or modify
-it under the same terms as Perl itself.
+Originally written by Mats Kindahl E<lt>mats@kindahl.netE<gt>.
+
+=head1 COPYRIGHT AND LICENCE
+
+Copyright (c) 2007 Martin Becker E<lt>becker-cpan-mp@cozap.comE<gt>.
+All rights reserved.
+
+This module is free software; you can redistribute it and/or
+modify it under the same terms as Perl itself.  See L<perlartistic>.
+
+This module is distributed in the hope that it will be useful,
+but without any warranty; without even the implied warranty of
+merchantability or fitness for a particular purpose.
 
 =cut
 

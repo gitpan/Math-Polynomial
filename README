@@ -1,20 +1,28 @@
-Perl Module Math::Polynomial - 0.03
-Perl Module Math::Interpolate - 0.03
+Perl Module Math::Polynomial - 0.04
 
-     Copyright (c) 1998 Mats Kindahl. All rights reserved.
+    Currently maintained by Martin Becker "becker-cpan-mp@cozap.com".
 
-     This program is free software; you can redistribute it and/or
-     modify it under the same terms as Perl itself.
+    Originally written by Mats Kindahl "mats@kindahl.net".
+
+    Copyright (c) 2007 Martin Becker.  All rights reserved.
+
+    This module is free software; you can redistribute it and/or modify
+    it under the same terms as Perl itself.
 
 To install, unzip and untar the archive. In the directory created type
 
-perl Makefile.PL
-make
-make test
-make install
+    perl Makefile.PL
+    make
+    make test
+    make install
 
-Documentation is in the module file and will be added onto
-perllocal.pod as usual.
+Documentation is in the module file, available through perldoc.
+Additional documentation can be found in the examples subdirectory.
 
-I can be contacted using e-mail at matkin@docs.uu.se,
-matkin@acm.org, or matkin@iar.se.
+Note that version 0.04 is a beta release. The module is currently in the
+process of an overhaul that may result in incompatible interface changes.
+In particular, methods exposing implementation details rather than
+mathematical properties of polynomials are going to become obsolete.
+
+If you want to get involved, you are welcome to send e-mail to
+the maintainer.

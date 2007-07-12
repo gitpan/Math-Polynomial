@@ -1,6 +1,5 @@
 
-use Math::Polynomial;
-use Math::Interpolate qw(interpolate);
+use Math::Polynomial qw(interpolate);
 use FileHandle;
 
 Math::Polynomial->verbose(1);
@@ -12,7 +11,7 @@ while (<FD>) {
     push(@V, $1, $2) if /^(\d+)\s*(\d+)/;
 }
 
-my $A = &interpolate(@V);
+my $A = interpolate(@V);
 
 close(FD);
 
