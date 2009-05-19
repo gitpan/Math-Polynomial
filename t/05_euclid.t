@@ -1,21 +1,23 @@
-# Copyright (c) 2007-2008 Martin Becker.  All rights reserved.
+# Copyright (c) 2007-2009 Martin Becker.  All rights reserved.
 # This package is free software; you can redistribute it and/or modify it
 # under the same terms as Perl itself.
+#
+# $Id: 05_euclid.t 30 2009-05-19 13:48:07Z demetri $
+
+# Checking Euclidean algorithm and related operators.
 
 # Before `make install' is performed this script should be runnable with
-# `make test'. After `make install' it should work as `perl 05_euclid.t'
+# `make test'. After `make install' it should work as `perl t/05_euclid.t'
 
 #########################
 
 use strict;
 use Test;
+use lib 't/lib';
+use Test::MyUtils;
 BEGIN {
-    if (!eval "require Math::BigRat") {
-        print "1..0 # SKIP Math::BigRat not available\n";
-        exit 0;
-    }
-    import Math::BigRat;
-    plan tests => 17;
+    use_or_bail('Math::BigRat', 0.16, ['try' => 'GMP,Pari']);
+    plan tests => 22;
 }
 use Math::BigInt;
 use Math::Polynomial 1.000;
@@ -41,6 +43,7 @@ my $dd1 = $x->new(Math::BigRat->new('1'));
 my $dd2 = $x->new(Math::BigRat->new('32/5'), Math::BigRat->new('-4/5'));
 my $mm1 = -5 * ($x + 4) / 108;
 my $mm2 =  4 * ($x + 1) * ($x - 5) / 108;
+my $qqi =  (-$x + 8) / 135;
 
 my ($d, $d1, $d2, $m1, $m2) = $p->xgcd($q);
 ok($dd  == $d);
@@ -56,8 +59,14 @@ ok($dd1 == $d2);
 ok($mm2 == $m1);
 ok($mm1 == $m2);
 
-$dd = eval { $p->gcd($q, 'nonexistent_method') };
-ok(!defined($dd) && $@ && $@ =~ /no such method: nonexistent_method/);
+my $qi = $q->inv_mod($p);
+ok($qqi == $qi);
+ok($qi * $q % $p == $dd->monize);
+
+# -- diagnostics --
+
+$d = eval { $p->gcd($q, 'nonexistent_method') };
+ok(!defined($d) && $@ && $@ =~ /no such method: nonexistent_method/);
 
 my $bad_mod_called = 0;
 sub Math::Polynomial::bad_mod {
@@ -69,12 +78,22 @@ sub Math::Polynomial::bad_mod {
     return $this;
 }
 
-$dd = eval { $p->gcd($q, 'bad_mod') };
-ok(!defined($dd) && $@ && $@ =~ /bad modulus operator/);
+$d = eval { $p->gcd($q, 'bad_mod') };
+ok(!defined($d) && $@ && $@ =~ /bad modulo operator/);
 ok(1 == $bad_mod_called);
 
-$dd = eval { $p->xgcd($q) };
-ok(!defined($dd) && $@ && $@ =~ /array context required/);
+$d = eval { $p->xgcd($q) };
+ok(!defined($d) && $@ && $@ =~ /array context required/);
+
+my $zp = $p - $p;
+$d = eval { $q->inv_mod($zp) };
+ok(!defined($d) && $@ && $@ =~ /division by zero polynomial/);
+
+$d = eval { $zp->inv_mod($q) };
+ok(!defined($d) && $@ && $@ =~ /division by zero polynomial/);
+
+$d = eval { (($x-1)*$q)->inv_mod($q) };
+ok(!defined($d) && $@ && $@ =~ /division by zero polynomial/);
 
 __END__
 p == 4      (x+1)(x+1)(x-2)(x-5)  == 4 x^4 - 20 x^3 - 12 x^2 + 52 x + 40

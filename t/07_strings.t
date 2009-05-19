@@ -1,15 +1,19 @@
-# Copyright (c) 2007-2008 Martin Becker.  All rights reserved.
+# Copyright (c) 2007-2009 Martin Becker.  All rights reserved.
 # This package is free software; you can redistribute it and/or modify it
 # under the same terms as Perl itself.
+#
+# $Id: 07_strings.t 30 2009-05-19 13:48:07Z demetri $
+
+# Checking stringification and stringification parameters.
 
 # Before `make install' is performed this script should be runnable with
-# `make test'. After `make install' it should work as `perl 07_strings.t'
+# `make test'. After `make install' it should work as `perl t/07_strings.t'
 
 #########################
 
 use strict;
 use Test;
-BEGIN { plan tests => 62 };
+BEGIN { plan tests => 65 };
 use Math::Polynomial 1.000;
 ok(1);
 
@@ -156,6 +160,10 @@ ok($p->string_config, $config2, 'p with config2');
 ok($p->as_string, '(x^3 + 2 x - 1)', '"p" with config2');
 ok(Math::Polynomial->string_config, $config1, 'global config1');
 
+my $pp = $p->clone;
+ok($pp->string_config, $config2, 'pp with config2');
+ok($pp->as_string, '(x^3 + 2 x - 1)', '"pp" with config2');
+
 my $q = $p - 1;
 ok($q->string_config, $config2, 'q with config2');
 ok($q->as_string, '(x^3 + 2 x - 2)', '"q" with config2');
@@ -163,6 +171,7 @@ ok($q->as_string, '(x^3 + 2 x - 2)', '"q" with config2');
 $p->string_config($config3);
 ok($p->string_config, $config3, 'p with config3');
 ok($p->as_string, '(-1 + 2 x + x^3)', '"p" with config3');
+ok($pp->string_config, $config2, 'pp still with config2');
 ok($q->string_config, $config2, 'q still with config2');
 
 $q->string_config(undef);

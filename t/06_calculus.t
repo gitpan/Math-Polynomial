@@ -1,9 +1,13 @@
-# Copyright (c) 2007-2008 Martin Becker.  All rights reserved.
+# Copyright (c) 2007-2009 Martin Becker.  All rights reserved.
 # This package is free software; you can redistribute it and/or modify it
 # under the same terms as Perl itself.
+#
+# $Id: 06_calculus.t 30 2009-05-19 13:48:07Z demetri $
+
+# Checking calculus operators.
 
 # Before `make install' is performed this script should be runnable with
-# `make test'. After `make install' it should work as `perl 06_calculus.t'
+# `make test'. After `make install' it should work as `perl t/06_calculus.t'
 
 #########################
 

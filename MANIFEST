@@ -4,6 +4,9 @@ Makefile.PL
 README
 examples/horner.pl
 examples/legendre.pl
+examples/migration.pl
+examples/runge.pl
+examples/runge_plot.png
 lib/Math/Polynomial.pm
 lib/Math/Polynomial/Generic.pm
 t/01_load.t
@@ -17,11 +20,12 @@ t/08_generic.t
 t/10_math_complex.t
 t/11_math_bigrat.t
 t/12_gf3.t
-t/20_extensions.t
 t/90_pod.t
 t/91_pod_cover.t
 t/92_consistency.t
-t/93_signature.t
+t/93_examples.t
+t/94_diag_cover.t
+t/99_signature.t
 t/lib/Test/MyUtils.pm
 META.yml                                 Module meta-data (added by MakeMaker)
 SIGNATURE                                Public-key signature (added by MakeMaker)

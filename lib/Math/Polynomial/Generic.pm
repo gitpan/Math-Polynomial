@@ -1,3 +1,9 @@
+# Copyright (c) 2009 by Martin Becker.  All rights reserved.
+# This package is free software; you can redistribute it and/or modify it
+# under the same terms as Perl itself.
+#
+# $Id: Generic.pm 6 2009-05-10 23:50:09Z demetri $
+
 package Math::Polynomial::Generic;
 
 use 5.006;
@@ -7,7 +13,7 @@ use Math::Polynomial 1.000;
 
 require Exporter;
 
-our @ISA = qw(Math::Polynomial Exporter);
+use base qw(Math::Polynomial Exporter);
 
 our @EXPORT_OK = qw( X C );
 
@@ -48,7 +54,7 @@ sub _cast {
 }
 
 sub divmod {
-    croak "implementation restriction: generic division not defined";
+    croak 'implementation restriction: generic division not defined';
 }
 
 1;
@@ -143,15 +149,11 @@ polynomial object, add a C<C()>-wrapped zero value.
   $q = X + C($c);                  # OK
   $q = C($c) * X**2;               # OK
 
-  $q = X / X;                      # wrong (see below)
+  $q = X / X + C(0);               # wrong (generic division)
 
 =head2 OVERRIDDEN METHODS
 
 =over 4
-
-=item I<is_generic>
-
-Boolean true for generic objects, false for regular polynomials.
 
 =item I<divmod>
 
@@ -164,6 +166,10 @@ against such cases.
 =head2 PROTECTED METHODS
 
 =over 4
+
+=item I<_is_generic>
+
+Boolean true for generic objects, false for regular polynomials.
 
 =item I<_cast>
 

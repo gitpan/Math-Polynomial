@@ -1,20 +1,22 @@
-# Copyright (c) 2007-2008 Martin Becker.  All rights reserved.
+# Copyright (c) 2007-2009 Martin Becker.  All rights reserved.
 # This package is free software; you can redistribute it and/or modify it
 # under the same terms as Perl itself.
+#
+# $Id: 11_math_bigrat.t 30 2009-05-19 13:48:07Z demetri $
+
+# Checking coefficient space compatibility with Math::BigRat.
 
 # Before `make install' is performed this script should be runnable with
-# `make test'. After `make install' it should work as `perl 11_math_bigrat.t'
+# `make test'. After `make install' it should work as `perl t/11_math_bigrat.t'
 
 #########################
 
 use strict;
 use Test;
+use lib 't/lib';
+use Test::MyUtils;
 BEGIN {
-    if (!eval "require Math::BigRat") {
-        print "1..0 # SKIP Math::BigRat not available\n";
-        exit 0;
-    }
-    Math::BigRat->import(try => 'GMP,Pari');
+    use_or_bail('Math::BigRat', 0.16, ['try' => 'GMP,Pari']);
     plan tests => 8;
 }
 use Math::Polynomial 1.000;

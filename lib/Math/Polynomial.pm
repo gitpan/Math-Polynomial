@@ -1,8 +1,8 @@
-# Copyright (c) 2007-2008 by Martin Becker.  All rights reserved.
+# Copyright (c) 2007-2009 by Martin Becker.  All rights reserved.
 # This package is free software; you can redistribute it and/or modify it
 # under the same terms as Perl itself.
 #
-# $Id$
+# $Id: Polynomial.pm 33 2009-05-19 22:33:18Z demetri $
 
 package Math::Polynomial;
 
@@ -23,6 +23,7 @@ overload->import(
     q{<<}       => _lefty('shift_up'),
     q{>>}       => _lefty('shift_down'),
     q{!}        => 'is_zero',
+    q{bool}     => 'is_nonzero',
     q{==}       => _binary('is_equal'),
     q{!=}       => _binary('is_unequal'),
     q{""}       => 'as_string',
@@ -42,8 +43,8 @@ use constant NFIELDS  => 4;
 
 # ----- static data -----
 
-our $VERSION     = '1.000';
-our $max_degree  = 1_000_000;   # limit for power operator
+our $VERSION     = '1.001';
+our $max_degree  = 10_000;      # limit for power operator
 
 # default values for as_string options
 my @string_defaults = (
@@ -128,6 +129,7 @@ sub _check_int {
             $arg == abs int $arg
         } or croak 'non-negative integer argument expected';
     }
+    return;
 }
 
 # ----- methods -----
@@ -135,36 +137,44 @@ sub _check_int {
 sub new {
     my ($this, @coeff) = @_;
     my $class = ref $this;
-    my ($zero, $one, $config);
+    my ($zero, $one, @more);
     if ($class) {
-        $zero   = $this->coeff_zero;
-        $one    = $this->coeff_one;
-        $config = $this->string_config;
+        (undef, $zero, $one, @more) = @{$this};
     }
     else {
         my $sample = @coeff? $coeff[-1]: 1;
         $zero   = $sample - $sample;
         $one    = $sample ** 0;
-        $config = undef;
+        @more   = (undef);
         $class  = $this;
     }
     while (@coeff && $zero == $coeff[-1]) {
         pop @coeff;
     }
-    return bless [\@coeff, $zero, $one, $config], $class;
+    return bless [\@coeff, $zero, $one, @more], $class;
+}
+
+sub clone {
+    my ($this) = @_;
+    return bless [@{$this}], ref $this;
 }
 
 sub monomial {
     my ($this, $degree, $coeff) = @_;
     my $zero;
     _check_int($degree);
-    croak 'exponent too large' if $degree > $max_degree;
+    croak 'exponent too large'
+        if defined($max_degree) && $degree > $max_degree;
     if (ref $this) {
-        $coeff = $this->coeff_one if !defined $coeff;
+        if (!defined $coeff) {
+            $coeff = $this->coeff_one;
+        }
         $zero  = $this->coeff_zero;
     }
     else {
-        $coeff = 1 if !defined $coeff;
+        if (!defined $coeff) {
+            $coeff = 1;
+        }
         $zero  = $coeff - $coeff;
     }
     return $this->new(($zero) x $degree, $coeff);
@@ -172,8 +182,9 @@ sub monomial {
 
 sub string_config {
     my ($this, $config) = @_;
+    my $have_arg = 2 <= @_;
     if (ref $this) {
-        if (2 <= @_) {
+        if ($have_arg) {
             $this->[F_CONFIG] = $config;
         }
         else {
@@ -181,8 +192,8 @@ sub string_config {
         }
     }
     else {
-        if (2 <= @_) {
-            # note: do not undefine ultimate fallback configuration
+        if ($have_arg) {
+            # note: do not leave ultimate fallback configuration undefined
             $global_string_config = $config || {};
         }
         else {
@@ -237,9 +248,6 @@ sub coeff {
     return @{$this->[F_COEFF]};
 }
 
-sub coeff_zero { return $_[0]->[F_ZERO]; }
-sub coeff_one  { return $_[0]->[F_ONE]; }
-
 sub coefficients {
     my ($this) = @_;
     croak 'array context required' if !wantarray;
@@ -247,6 +255,8 @@ sub coefficients {
 }
 
 sub degree     { return $#{ $_[0]->[F_COEFF] }; }
+sub coeff_zero { return $_[0]->[F_ZERO]; }
+sub coeff_one  { return $_[0]->[F_ONE]; }
 
 sub proper_degree {
     my ($this) = @_;
@@ -278,6 +288,11 @@ sub nest {
 sub is_zero {
     my ($this) = @_;
     return $this->degree < 0;
+}
+
+sub is_nonzero {
+    my ($this) = @_;
+    return $this->degree >= 0;
 }
 
 sub is_equal {
@@ -380,15 +395,15 @@ sub mmod {
     my @rem  = $this->coeff;
     my $i    = $#rem - @den;
     while (0 <= $i) {
-        my $q = pop(@rem);
+        my $q = pop @rem;
         my $j = 0;
-	while ($j < $i) {
+        while ($j < $i) {
             $rem[$j++] *= $hd;
-	}
+        }
         foreach my $d (@den) {
             ($rem[$j++] *= $hd) -= $q * $d;
         }
-	--$i;
+        --$i;
     }
     return $this->new(@rem);
 }
@@ -418,9 +433,15 @@ sub div_const {
     return $this->new( map { $_ / $divisor } $this->coeff );
 }
 
+sub is_monic {
+    my ($this) = @_;
+    my $degree = $this->degree;
+    return 0 <= $degree && $this->coeff_one == $this->coeff($degree);
+}
+
 sub monize {
     my ($this) = @_;
-    return $this if $this->is_zero;
+    return $this if $this->is_zero || $this->is_monic;
     return $this->div_const($this->coeff($this->degree));
 }
 
@@ -431,7 +452,8 @@ sub pow {
     return $this->new($this->coeff_one)        if 0 == $exp;
     return $this                                if 0  > $degree;
     return $this->new($this->coeff(0) ** $exp) if 0 == $degree;
-    croak 'exponent too large' if $degree * $exp > $max_degree;
+    croak 'exponent too large'
+        if defined($max_degree) && $degree * $exp > $max_degree;
     my $result = undef;
     while ($exp) {
         if (1 & $exp) {
@@ -455,7 +477,7 @@ sub pow_mod {
     while ($exp) {
         if (1 & $exp) {
             $result =
-		defined($result)? $this->mul($result)->mod($that): $this;
+                defined($result)? $this->mul($result)->mod($that): $this;
         }
         $exp >>= 1 and $this = $this->mul($this)->mod($that);
     }
@@ -465,7 +487,8 @@ sub pow_mod {
 sub shift_up {
     my ($this, $exp) = @_;
     _check_int($exp);
-    croak 'exponent too large' if $this->degree + $exp > $max_degree;
+    croak 'exponent too large' if
+        defined($max_degree) && $this->degree + $exp > $max_degree;
     return $this if !$exp;
     return $this->new(($this->coeff_zero) x $exp, $this->coeff);
 }
@@ -480,11 +503,11 @@ sub shift_down {
 sub slice {
     my ($this, $start, $count) = @_;
     _check_int($start, $count);
-    my $this_d = $this->degree;
+    my $degree = $this->degree;
     my $end = $start+$count-1;
-    if ($this_d <= $end) {
-	return $this if 0 == $start;
-	$end = $this_d;
+    if ($degree <= $end) {
+        return $this if 0 == $start;
+        $end = $degree;
     }
     return $this->new( map { $this->coeff($_) } $start .. $end );
 }
@@ -572,25 +595,25 @@ sub as_string {
 
 sub gcd {
     my ($this, $that, $mod) = @_;
-    defined($mod) or $mod = 'mod';
+    defined $mod or $mod = 'mod';
     my $mod_op = $this->can($mod);
     $mod_op or croak "no such method: $mod";
     my ($this_d, $that_d) = ($this->degree, $that->degree);
     if ($this_d < $that_d) {
         ($this, $that) = ($that, $this);
-	($this_d, $that_d) = ($that_d, $this_d);
+        ($this_d, $that_d) = ($that_d, $this_d);
     }
     while (0 <= $that_d) {
         ($this, $that) = ($that, $this->$mod_op($that));
-	($this_d, $that_d) = ($that_d, $that->degree);
-	$this_d > $that_d or croak 'bad modulus operator';
+        ($this_d, $that_d) = ($that_d, $that->degree);
+        $this_d > $that_d or croak 'bad modulo operator';
     }
     return $this;
 }
 
 sub xgcd {
-    croak 'array context required' if !wantarray;
     my ($this, $that) = @_;
+    croak 'array context required' if !wantarray;
     my ($d1, $d2) = ($this->new($this->coeff_one), $this->new);
     if ($this->degree < $that->degree) {
         ($this, $that) = ($that, $this);
@@ -606,12 +629,19 @@ sub xgcd {
     return ($this, $d1, $d2, $m1, $m2);
 }
 
+sub inv_mod {
+    my ($this, $that) = @_;
+    my ($d, $d2) = ($that->xgcd($this))[0, 2];
+    croak 'division by zero polynomial' if $that->is_zero || $d2->is_zero;
+    return $d2->div_const($d->coeff($d->degree));
+}
+
 1;
 __END__
 
 =head1 NAME
 
-Math::Polynomial - Perl class representing polynomials in one variable
+Math::Polynomial - Perl class for polynomials in one variable
 
 =head1 VERSION
 
@@ -621,157 +651,29 @@ This documentation refers to version 1.000 of Math::Polynomial.
 
   use Math::Polynomial 1.000;
 
-  # simple constructors:
-  $p  = Math::Polynomial->new(0, -3, 0, 2);    # (2*x**3 - 3*x)
-  $zp = Math::Polynomial->new();               # the zero polynomial
-  $zp = Math::Polynomial->new(0);              # the zero polynomial
-  $q  = Math::Polynomial->monomial(3);         # (x**3)
-  $r  = Math::Polynomial->monomial(3, 2);      # (2*x**3)
+  $p = Math::Polynomial->new(0, -2, 0, 1);    # x^3 - 2 x
 
-  # Lagrange interpolation:
-  $s = Math::Polynomial->interpolate([0..3], [0, -1, 10, 45]);
+  print "p = $p\n";                           # p = (x^3 + -2 x)
 
-  # constructors as object methods:
-  $t = $p->new(0, -3, 0, 2);                   # (2*x**3 - 3*x)
-  $u = $p->monomial(3, 2);                     # (2*x**3)
-  $v = $p->interpolate([0..3], [0, -1, 10, 45]); # (2*x**3 - 3*x)
+  $p->string_config({ fold_sign => 1 });
+  print "p = $p\n";                           # p = (x^3 - 2 x)
 
-  # properties
-  $coeff = $p->coeff(0);                       #     0
-  $coeff = $p->coeff(1);                       #        -3
-  $coeff = $p->coeff(2);                       #            0
-  $coeff = $p->coeff(3);                       #               2
-  $coeff = $p->coeff(4);                       # 0
-  $const = $p->coeff_zero;                     # 0
-  $const = $p->coeff_one;                      # 1
-  @coeff = $p->coeff;                          #    (0, -3, 0, 2)
-  @coeff = $zp->coeff;                         #    ()
-  @coeff = $p->coefficients;                   #    (0, -3, 0, 2)
-  @coeff = $zp->coefficients;                  #    (0)
-  $n = $p->degree;                             # 3
-  $n = $zp->degree;                            # -1
-  $n = $p->proper_degree;                      # 3
-  $n = $zp->proper_degree;                     # undef
+  $q = $p->new(0, 3, 0, -4, 0, 1);            # x^5 - 4 x^3 + 3 x
 
-  # evaluation
-  $y = $p->evaluate(4);                        # 116
+  $r = $p ** 2 - $p * $q;                     # arithmetic expression
+  $bool = $p == $q;                           # boolean expression
 
-  # comparison
-  $bool = !$p;         $bool = $p->is_zero;    # p(x) == 0 everywhere
-  $bool = $p == $q;    $bool = $p->is_equal($q);      # equality
-  $bool = $p != $q;    $bool = $p->is_unequal($q);    # inequality
+  ($s, $t) = $r->divmod($q);                  # q * s + t = r
 
-  # arithmetic
-  $q = -$p;            $q = $p->neg;           # q(x) == -p(x)
-  $q = $p1 + $p2;      $q = $p1->add($p2);     # q(x) == p1(x) + p2(x)
-  $q = $p1 - $p2;      $q = $p1->sub_($p2);    # q(x) == p1(x) - p2(x)
-  $q = $p1 * $p2;      $q = $p1->mul($p2);     # q(x) == p1(x) * p2(x)
-  $q = $p1 / $p2;      $q = $p1->div($p2);     # p1 == q * p2 + r,
-                                               #   deg r < deg p2
-  $r = $p1 % $p2;      $r = $p1->mod($p2);     # p1 == q * p2 + r,
-                                               #   deg r < deg p2
-  $q = $p + 3;         $q = $p->add_const(3);  # q(x) == p(x) + 3
-  $q = $p - 3;         $q = $p->sub_const(3);  # q(x) == p(x) - 3
-  $q = $p * 3;         $q = $p->mul_const(3);  # q(x) == p(x) * 3
-  $q = $p / 3;         $q = $p->div_const(3);  # q(x) == p(x) / 3
+  $u = $r->gcd($q);                        # greatest common divisor,
+                                           # here: u = 3 x
+  $v = $u->monize;                         # v = x
+  
+  $y = $p->evaluate(0.5);                     # y = p(0.5) = -0.875
+  $d = $q->degree;                            # d = degree(q) = 5
 
-  $q = $p ** 3;        $q = $p->pow(3);        # q(x) == p(x) ** 3
-  $q = $p << 3;        $q = $p->shift_up(3);   # q(x) == p(x) * x**3
-  $q = $p >> 3;        $q = $p->shift_down(3); # p == q * x**3 + r,
-                                               #   deg r < 3
-
-  $r = $p->slice(0, 3);              # p ==  q * x**3 + r, deg r < 3
-  $r = $p->slice(2, 3);              # p == (q * x**3 + r) * x**2 + s,
-                                     #   deg r < 3, deg s < 2
-
-  ($q, $r) = $p1->divmod($p2);                 # p1 == q * p2 + r,
-                                               #   deg r < deg p2
-  $r = $p1->pow_mod(3, $p2);                   # p1**3 == q * p2 + r,
-                                               #   deg r < deg p2
-  $r = $p1->mmod($p2);                         # c * p1 == q * p2 + r,
-                                               #   deg r < deg p2,
-					       #   c is some constant
-
-  $q = $p1->nest($p2);                         # q(x) == p1(p2(x))
-  $q = $p->monize;                             # p(x) == q(x) * c,
-                                               #   q is monic
-
-  # greatest common divisor
-  $d = $p1->gcd($p2);                          # p1 == q1 * d,
-                                               # p2 == q2 * d,
-                                               # deg d is maximal
-
-  $d = $p1->gcd($p2, 'mmod');                  # like gcd, but with
-  					       # alternate modulus op
-
-  # extended Euclidean algorithm
-  ($d, $d1, $d2, $m1, $m2) = $p1->xgcd($p2);   # p1 == q1 * d,
-                                               # p2 == q2 * d,
-                                               # deg d is maximal,
-                                               # d == p1*d1 + p2*d2,
-                                               # 0 == p1*m1 + p2*m2
-
-  # calculus
-  $q = $p->differentiate;             # q(x) == d/dx p(x)
-  $q = $p->integrate;                 # d/dx q(x) == p(x), q(0) == 0
-  $q = $p->integrate(10);             # d/dx q(x) == p(x), q(0) == 10
-  $a = $p->definite_integral(1, 2);   # Integral from 1 to 2, p(x) dx
-
-  # configurable string representation
-  $config = {
-    ascending     => 0,
-    with_variable => 1,
-    fold_sign     => 0,
-    fold_zero     => 1,
-    fold_one      => 1,
-    fold_exp_zero => 1,
-    fold_exp_one  => 1,
-    convert_coeff => sub { "$_[0]" },
-    plus          => q{ + },
-    minus         => q{ - },
-    leading_plus  => q{},
-    leading_minus => q{- },
-    times         => q{ },
-    power         => q{^},
-    variable      => q{x},
-    prefix        => q{(},
-    suffix        => q{)},
-  };
-  $str = "$p";                                 # '(2 x^3 + -3 x)'
-  $str = $p->as_string();                      # '(2 x^3 + -3 x)'
-  $str = $p->as_string($config);               # '(2 x^3 + -3 x)'
-
-  $str = $p->as_string({fold_sign => 1});      # '(2 x^3 - 3 x)'
-
-  $p->string_config({fold_sign => 1});
-  $str = "$p";                                 # '(2 x^3 - 3 x)'
-  $str = $p->as_string;                        # '(2 x^3 - 3 x)'
-
-  $p->string_config(undef);
-  $str = "$p";                                 # '(2 x^3 + -3 x)'
-
-  Math::Polynomial->string_config({fold_sign => 1});
-  $str = "$p";                                 # '(2 x^3 - 3 x)'
-
-  $config = $p->string_config;                 # undef
-  $config = Math::Polynomial->string_config;   # {fold_sign => 1}
-
-  $config = {
-    with_variable => 0,
-    ascending     => 1,
-    plus          => q{, },
-  };
-  $str = $p->as_string($config);               # '(0, -3, 0, 2)'
-
-  # examples of other coefficient spaces
-  $c0 = Math::Complex->make(0, 3);
-  $c1 = Math::Complex->make(2, 1);
-  $p = Math::Polynomial->new($c0, $c1);        # p(x) == (2+i)*x + 3i
-
-  $c0 = Math::BigRat->new('-1/2');
-  $c1 = Math::BigRat->new('0');
-  $c2 = Math::BigRat->new('3/2');
-  $p = Math::Polynomial->new($c0, $c1, $c2);  # p(x) == 3/2*x**2 - 1/2
+  $w = $p->interpolate([0..2], [-1, 0, 3]);   # w(0) = -1, w(1) = 0,
+                                              # w(2) = 3
 
 =head1 DESCRIPTION
 
@@ -787,9 +689,11 @@ polynomials other than the zero polynomial, the exponent of the
 highest power of x with a nonzero coefficient is called the degree
 of the polynomial.
 
-Math::Polynomial objects are immutable.  New objects can be created
-using a variety of constructors or as expressions composed from
-existing objects.
+New Math::Polynomial objects can be created using a variety of
+constructors, or as results of expressions composed from existing objects.
+Math::Polynomial objects are immutable with respect to mathematical
+properties; all operations on polynomials create and return new objects
+rather than modifying anything.
 
 The module works with various types of coefficients, like ordinary
 floating point numbers, complex numbers, arbitrary precision
@@ -803,12 +707,12 @@ Math::Polynomial objects are implicitly bound to their coefficient
 space, which will be inherited when new polynomials are derived
 from existing ones, or determined from actual coefficients when
 polynomials are created from scratch.  It is the responsibility of
-the user not to mix coefficients that cannot be added to or multiplied
-by each other.
+the application not to mix coefficients that cannot be added to or
+multiplied by each other.
 
-Note that ordinary Perl numbers are of only limited use as coefficients,
-since floating point arithmetic, unlike arithmetic in algebraic
-fields, suffers from rounding errors.
+Note that ordinary Perl numbers used as coefficients have the disadvantage
+that rounding errors may lead to undesired effects, such as unexpectedly
+nonzero division remainders or mysteriously failing equality checks.
 
 =head1 CLASS VARIABLES
 
@@ -827,8 +731,8 @@ is recommended because previous versions had a different API.
 =item I<$max_degree>
 
 C<$max_degree> limits the arguments for the I<pow> and I<shift_up>
-operators and the monomial constructors, see L</pow>.  Its default
-value is one million.
+operators and the monomial constructor, see L</pow>.  Its default
+value is ten thousand.  It can be undefined to disable any size checks.
 
 =back
 
@@ -842,8 +746,8 @@ value is one million.
 
 C<Math::Polynomial-E<gt>new(@coeff)> creates a new polynomial with
 the given coefficients for x to the power of zero, one, two, etc.
-For example, I<new(7, 1)> creates an object representing p(x) =
-7+x.
+For example, C<Math::Polynomial-E<gt>new(7, 1)> creates an object
+representing I<p(x) = 7+x>.
 
 Note that coefficients are specified in ascending order of powers
 of x.  The degree of the polynomial will be at most I<n-1> if I<n>
@@ -880,14 +784,20 @@ in the coefficient space.  The result will be a polynomial of degree
 I<n-1>.
 
 Note that with increasing numbers of support points, Lagrange
-interpolation tends to get numerically unstable, meaning drastically
-inaccurate if carried out with limited precision.  Furthermore,
-high-degree interpolation polynomials can oscillate wildly in the
-neighbourhood of the support points, let alone elswhere.  This is
-not a fault of the module but fundamental to the nature of these
-functions.
+interpolation tends to get inaccurate if carried out with limited
+numerical precision.  Furthermore, high-degree interpolation
+polynomials can oscillate wildly in the neighbourhood of the support
+points, let alone elswhere, unless the support point x-values are
+carefully chosen.  This is due to the nature of these functions and
+not a fault of the module.  A script demonstrating this phenomenon
+can be found in the Math-Polynomial examples directory.
 
 =back
+
+=head2 Other class methods
+
+Some properties governing default behaviour can be accessed through the
+class method I<string_config>.  See L</String Representation>.
 
 =head1 OBJECT METHODS
 
@@ -906,7 +816,7 @@ below) are inherited likewise.
 
 If C<$p> refers to a Math::Polynomial object, the object method
 C<$p-E<gt>new(@coeff)> creates and returns a new polynomial sharing
-the coefficient space with C<$p>, but with its own list of coefficients
+inheritable properties with C<$p>, but with its own list of coefficients
 as specified in C<@coeff>.
 
 =item I<monomial($degree)>
@@ -925,11 +835,17 @@ must be at most C<$Math::Polynomial::max_degree>.
 =item I<interpolate([$x1, $x2, ...], [$y1, $y2, ...])>
 
 C<$p-E<gt>interpolate(\@x_values, \@y_values)> is the object method
-variant of the Lagrange interpolation polynomial constructor.  It
-creates a polynomial passing through support points with the given
-x- and y-coordinates.  The x-values must be mutually distinct.  The
-number of y-values must be equal to the number of x-values.  All
-values must belong to the coefficient space of C<$p>.
+usage of the Lagrange interpolation polynomial constructor.  It creates
+a polynomial passing through support points with the given x- and
+y-coordinates.  The x-values must be mutually distinct.  The number
+of y-values must be equal to the number of x-values.  All values must
+belong to the coefficient space of C<$p>.
+
+=item I<clone>
+
+C<$p-E<gt>clone> returns a new object equal to C<$p>.  This method
+will rarely be needed as Math::Polynomial objects are immutable
+except for their stringification configuration (cf. L</string_config>).
 
 =back
 
@@ -954,7 +870,7 @@ be an empty list.
 (Mnemonic for I<coeff> versus I<coefficients>: Shorter name, shorter
 list.)
 
-=item I<coeff($degree)>
+=item I<coeff($exp)>
 
 C<$p-E<gt>coeff($exp)> returns the coefficient of degree C<$exp>
 of C<$p>.  If C<$exp> is less than zero or larger than the degree
@@ -978,9 +894,16 @@ otherwise the degree of C<$p>.
 
 =item I<proper_degree>
 
-C<$p-E<gt>proper_degree> returns B<undef> if C<$p> is a zero polynomial,
-otherwise the degree of C<$p>.  This can be useful for catching incorrect
-numerical uses of degrees where zero polynomials might be involved.
+C<$p-E<gt>proper_degree> returns B<undef> if C<$p> is a zero
+polynomial, otherwise the degree of C<$p>.  This can be useful in
+order to catch incorrect numerical uses of degrees where zero
+polynomials might be involved.
+
+=item I<is_monic>
+
+C<$p-E<gt>is_monic> returns a boolean value which is true if C<$p> is
+monic, which means it is not the zero polynomial and its highest-degree
+coefficient is equal to one.  Cf. L</monize>.
 
 =back
 
@@ -1001,6 +924,10 @@ coefficient space.
 
 All comparison operators return boolean results.
 
+Note that there are no order-checking comparisons (E<lt>, E<lt>=, E<gt>,
+E<lt>=E<gt>, ...) as neither polynomial nor coefficient spaces in general
+need to be ordered spaces.
+
 =over 4
 
 =item C<!>
@@ -1009,15 +936,23 @@ All comparison operators return boolean results.
 
 C<$p-E<gt>is_zero> or short C<!$p> checks whether C<$p> is a zero polynomial.
 
+=item I<is_nonzero>
+
+C<$p-E<gt>is_nonzero> checks whether C<$p> is not a zero polynomial.
+This method may be implicitly called if an object is used in boolean
+context such as the condition of a while loop.
+
 =item C<==>
 
 =item I<is_equal>
 
-C<$p-E<gt>is_equal($q)> or short C<$p == $q> checks whether C<$p>
-is equivalent to C<$q>.  The result is true if both polynomials
-have the same degree and all pairs of coefficients of same degree
-are equal.  For polynomials of equal degree I<n>, this takes at
-most I<n+1> equality checks in the coefficient space.
+C<$p-E<gt>is_equal($q)> or short C<$p == $q> checks whether C<$p> is
+equivalent to C<$q>.  The result is true if both polynomials have the
+same degree and the same coefficients.  For polynomials of equal degree
+I<n>, this takes at most I<n+1> equality checks in the coefficient space.
+
+Note that I<p == q> implies that I<p(x) == q(x)> for every I<x>,
+but the converse implication is not true for some coefficient spaces.
 
 =item C<!=>
 
@@ -1030,10 +965,6 @@ degree is different.  For polynomials of equal degree I<n>, this
 takes at most I<n+1> equality checks in the coefficient space.
 
 =back
-
-Note that there are no ordering comparisons (E<lt>, E<lt>=, E<gt>,
-E<lt>=E<gt>, ...) as neither polynomial nor coefficient spaces in
-general need to be ordered spaces.
 
 =head2 Arithmetic Operators
 
@@ -1068,7 +999,7 @@ The trailing underscore in the method name may look a bit odd but
 will prevent primitive syntax-aware tools from stumbling over
 "misplaced" I<sub> keywords.
 
-=item C<*>
+=item C< *>
 
 =item I<mul>
 
@@ -1109,30 +1040,29 @@ in the coefficient space as I<divmod>.
 C<$p-E<gt>mmod($q)> (modified mod) calculates the remainder from
 dividing one polynomial by another, multiplied by some constant.
 The constant is I<a**d> where I<a> is the highest coefficient of
-I<q> and I<d = degree(p) - degree(q) + 1>, if
-I<degree(p) E<gt> degree(q)>, otherwise I<1>.  This operation is
-suitable to substitute I<mod> in the Euclidean algorithm and can
-be calculated without division in the coefficient space.  For
-polynomials of degree I<m> and I<n>, I<mE<gt>=n>, this takes
-I<(m+1-n)*(m+3*n)/2> multiplications and I<(m+1-n)*n> subtractions
-in the coefficient space.
+I<q> and I<d = degree(p) - degree(q) + 1>, if I<degree(p) E<gt> degree(q)>,
+otherwise I<d = 0>.  This operation is suitable to substitute I<mod>
+in the Euclidean algorithm and can be calculated without division
+in the coefficient space.  For polynomials of degree I<m> and I<n>,
+I<mE<gt>=n>, this takes I<(m+1-n)*(m+3*n)/2> multiplications and
+I<(m+1-n)*n> subtractions in the coefficient space.
 
-=item C<**>
+=item C< **>
 
 =item I<pow>
 
-C<$p-E<gt>pow($n)> or short C<$p ** $n> calculates a power of a
-polynomial.  The exponent C<$n> must be a non-negative integer.  To
-prevent accidential excessive time and memory consumption, the
-degree of the result must be at most C<$Math::Polynomial::max_degree>,
-which is one million by default.  Calculating the I<n>-th power of
-a polynomial of degree I<m> takes I<O(m*m*n*n)> multiplications and
-additions in the coefficient space.
+C<$p-E<gt>pow($n)> or short C<$p ** $n> calculates a power of
+a polynomial.  The exponent C<$n> must be a non-negative integer.
+To prevent accidential excessive time and memory consumption, the
+degree of the result must be at most C<$Math::Polynomial::max_degree>.
+The degree limit can be configured, see L</$max_degree>.  Calculating
+the I<n>-th power of a polynomial of degree I<m> takes I<O(m*m*n*n)>
+multiplications and additions in the coefficient space.
 
 =item I<pow_mod>
 
-C<$p1-E<gt>pow_mod($n, $p2)> is equivalent to I<($p1 ** $n) % $p2>,
-except that the modulus operation is repeatedly applied to intermediate
+C<$p1-E<gt>pow_mod($n, $p2)> is equivalent to C<($p1 ** $n) % $p2>,
+except that the modulo operation is repeatedly applied to intermediate
 results in order to keep their degrees small.  The exponent C<$n>
 must be a non-negative integer.
 
@@ -1221,10 +1151,10 @@ otherwise a constant or zero polynomial.
 =item I<gcd>
 
 C<$p1-E<gt>gcd($p2, $mod)> calculates a greatest common divisor of
-two polynomials, using the Euclidean algorithm and the modulus
+two polynomials, using the Euclidean algorithm and the modulo
 operator as specified by name.  The C<$mod> parameter is optional
 and defaults to C<'mod'>.  With polynomials of degree I<m> and I<n>,
-I<mE<gt>=n>, and the default modulus operator I<mod>, this takes
+I<mE<gt>=n>, and the default modulo operator I<mod>, this takes
 at most I<n> polynomial divisions of decreasing degrees or I<O(m+n)>
 divisions and I<O(m*n)> multiplications and subtractions in the
 coefficient space.  With the I<mmod> operator, this takes I<O(m*n)>
@@ -1245,13 +1175,28 @@ and I<2*n> polynomial multiplications and subtractions of decreasing
 degrees, or, in the coefficient space: I<O(m+n)> divisions and
 I<O(m*n)> multiplications and subtractions.
 
+=item I<inv_mod>
+
+C<$q = $p1-E<gt>inv_mod($p2)> calculates the multiplicative pseudo-inverse
+I<q> of a polynomial I<p1> modulo another polynomial I<p2>.  I<p2>
+must not be a zero polynomial, and I<p1> must not be equivalent to zero
+modulo I<p2>.
+
+If I<p1> and I<p2> are relatively prime, the result will be a true
+modular inverse, i.e. I<q * p1 % p2> will be the same as I<p2 ** 0>.
+In any case, I<q> will be chosen such that I<q * p1 % p2> is the
+monic greatest common divisor of I<p1> and I<p2>.
+
+I<inv_mod> takes the same operations in the coefficient space as I<xgcd>
+plus I<monize>.
+
 =back
 
 =head2 Calculus Operators
 
-Calculus operators as presented here are meaningful mostly on
-the coefficient space of real numbers.  In particular, they require
-that coefficients can be multiplied and divided by integer numbers.
+Calculus operators as presented here are meaningful mostly on coefficient
+spaces of real or complex numbers.  In particular, they require that
+coefficients can be multiplied and divided by integer numbers.
 
 =over 4
 
@@ -1312,7 +1257,7 @@ of the I<as_string()> method when called without parameter.
 An optional configuration hashref controls many layout aspects of the
 string representation.  In the absence of an explicit configuration,
 a per-object default configuration is used, and in the absence of that,
-a global default configuration (see I<string_config>).
+a per-class default configuration (see L</string_config>).
 
 Each individual configuration setting has a default value as defined
 in the next section.
@@ -1327,10 +1272,9 @@ C<$p-E<gt>string_config> returns the per-object default stringification
 configuration as a reference to a hash, if present, otherwise undef.
 
 C<Math::Polynomial-E<gt>string_config($hashref)> sets the
-global default stringification configuration to C<$hashref>.
+per-class default stringification configuration to C<$hashref>.
 C<Math::Polynomial-E<gt>string_config> returns that configuration.
-It should always refer to an existing hash, which may of course
-be empty.
+It should always refer to an existing hash, which may be empty.
 
 A per-object configuration will be propagated to any new objects created
 from an object.  Thus it is easy to use consistent settings without
@@ -1405,8 +1349,8 @@ surrounded by blanks.
 
 =item leading_plus
 
-Sign symbol to put before the first term unless I<fold_sign> is
-true and the term is negative.  Default is an empty string.
+Sign symbol to put before the first term unless I<fold_sign> is true
+and the coefficient is negative.  Default is an empty string.
 
 =item leading_minus
 
@@ -1439,18 +1383,188 @@ parenthesis.
 
 =back
 
-=head1 EXTENSION REQUIREMENTS
+=head1 EXAMPLES
 
-Math::Polynomial can be extended in different ways.  Subclasses may
-restrict coefficient spaces to facilitate certain algorithms such
-as numerical root ex TODO
+  use Math::Polynomial 1.000;
 
-Special polynomials (such as Legendre, Hermite, Laguerre polynomials
-etc.) may be provided by packages offering just some constructors
-for them but no separate classes.  TODO Special algorithms dealing
-with or employing polynomials, such as for finding roots, finding
-polynomial approximations for other functions etc. may be provided
-by packages TODO
+  # simple constructors:
+  $p  = Math::Polynomial->new(0, -3, 0, 2);    # (2*x**3 - 3*x)
+  $zp = Math::Polynomial->new(0);              # the zero polynomial
+  $q  = Math::Polynomial->monomial(3, 2);      # (2*x**3)
+
+  # Lagrange interpolation:
+  $q = Math::Polynomial->interpolate([0..3], [0, -1, 10, 45]);
+                                               # (2*x**3 - 3*x)
+
+  # constructors used as object methods:
+  $q = $p->new(0, -3, 0, 2);                   # (2*x**3 - 3*x)
+  $q = $p->new;                                # the zero polynomial
+  $q = $p->monomial(3, 2);                     # (2*x**3)
+  $q = $p->monomial(3);                        # (x**3)
+  $q = $p->interpolate([0..3], [0, -1, 10, 45]); # (2*x**3 - 3*x)
+  $q = $p->clone;                              # q == p
+
+  # properties
+  @coeff = $p->coefficients;                   #    (0, -3, 0, 2)
+  @coeff = $p->coeff;                          #    (0, -3, 0, 2)
+  $coeff = $p->coeff(0);                       #     0
+  $coeff = $p->coeff(1);                       #        -3
+  $coeff = $p->coeff(2);                       #            0
+  $coeff = $p->coeff(3);                       #               2
+  $coeff = $p->coeff(4);                       # 0
+  @coeff = $zp->coefficients;                  #    (0)
+  @coeff = $zp->coeff;                         #    ()
+  $const = $p->coeff_zero;                     # 0
+  $const = $p->coeff_one;                      # 1
+  $n = $p->degree;                             # 3
+  $n = $zp->degree;                            # -1
+  $n = $p->proper_degree;                      # 3
+  $n = $zp->proper_degree;                     # undef
+
+  # evaluation
+  $y = $p->evaluate(4);                        # p(4) == 116
+
+  # comparison
+  $bool = !$p;         $bool = $p->is_zero;    # zero polynomial?
+  if ($p) ...          if ($p->is_nonzero) ... # not zero polynomial?
+
+  $bool = $p == $q;    $bool = $p->is_equal($q);      # equality
+  $bool = $p != $q;    $bool = $p->is_unequal($q);    # inequality
+
+  # arithmetic
+  $q = -$p;            $q = $p->neg;           # q(x) == -p(x)
+  $q = $p1 + $p2;      $q = $p1->add($p2);     # q(x) == p1(x) + p2(x)
+  $q = $p1 - $p2;      $q = $p1->sub_($p2);    # q(x) == p1(x) - p2(x)
+  $q = $p1 * $p2;      $q = $p1->mul($p2);     # q(x) == p1(x) * p2(x)
+  $q = $p1 / $p2;      $q = $p1->div($p2);     # p1 == q * p2 + r,
+                                               #   deg r < deg p2
+  $r = $p1 % $p2;      $r = $p1->mod($p2);     # p1 == q * p2 + r,
+                                               #   deg r < deg p2
+  $q = $p + 3;         $q = $p->add_const(3);  # q(x) == p(x) + 3
+  $q = $p - 3;         $q = $p->sub_const(3);  # q(x) == p(x) - 3
+  $q = $p * 3;         $q = $p->mul_const(3);  # q(x) == p(x) * 3
+  $q = $p / 3;         $q = $p->div_const(3);  # q(x) == p(x) / 3
+
+  $q = $p ** 3;        $q = $p->pow(3);        # q(x) == p(x) ** 3
+  $q = $p << 3;        $q = $p->shift_up(3);   # q(x) == p(x) * x**3
+  $q = $p >> 3;        $q = $p->shift_down(3); # p == q * x**3 + r,
+                                               #   deg r < 3
+
+  $r = $p->slice(0, 3);              # p ==  q * x**3 + r, deg r < 3
+  $r = $p->slice(2, 3);              # p == (q * x**3 + r) * x**2 + s,
+                                     #   deg r < 3, deg s < 2
+
+  ($q, $r) = $p1->divmod($p2);                 # p1 == q * p2 + r,
+                                               #   deg r < deg p2
+
+  $r = $p1->mmod($p2);                         # c * p1 == q * p2 + r,
+                                               #   deg r < deg p2,
+                                               #   c is a constant
+
+  $q = $p1->nest($p2);                         # q(x) == p1(p2(x))
+
+  $bool = $p->is_monic;                        # whether p is monic
+
+  $q = $p->monize;                             # p(x) == q(x) * c,
+                                               #   q is monic or zero
+
+  $r = $p1->pow_mod(3, $p2);                   # p1**3 == q * p2 + r,
+                                               #   deg r < deg p2
+
+  # greatest common divisor
+  $d = $p1->gcd($p2);                          # p1 == q1 * d,
+                                               # p2 == q2 * d,
+                                               # deg d is maximal
+
+  $d = $p1->gcd($p2, 'mmod');                  # like gcd, but with
+                                               # modified modulo op
+
+  # extended Euclidean algorithm
+  ($d, $d1, $d2, $m1, $m2) = $p1->xgcd($p2);   # p1 == q1 * d,
+                                               # p2 == q2 * d,
+                                               # deg d is maximal,
+                                               # d == p1*d1 + p2*d2,
+                                               # 0 == p1*m1 + p2*m2
+
+  $r = $p1->inv_mod($p2);                      # p1 * r == p2 * q + d,
+                                               #   deg r < deg p2,
+                                               #   d is monic gcd of
+                                               #   p1 and p2
+
+  # calculus
+  $q = $p->differentiate;             # q(x) == d/dx p(x)
+  $q = $p->integrate;                 # d/dx q(x) == p(x), q(0) == 0
+  $q = $p->integrate(10);             # d/dx q(x) == p(x), q(0) == 10
+  $a = $p->definite_integral(1, 2);   # Integral from 1 to 2, p(x) dx
+
+  # configurable string representation
+  $config = {
+    ascending     => 0,
+    with_variable => 1,
+    fold_sign     => 0,
+    fold_zero     => 1,
+    fold_one      => 1,
+    fold_exp_zero => 1,
+    fold_exp_one  => 1,
+    convert_coeff => sub { "$_[0]" },
+    plus          => q{ + },
+    minus         => q{ - },
+    leading_plus  => q{},
+    leading_minus => q{- },
+    times         => q{ },
+    power         => q{^},
+    variable      => q{x},
+    prefix        => q{(},
+    suffix        => q{)},
+  };
+  $str = "$p";                                 # '(2 x^3 + -3 x)'
+  $str = $p->as_string();                      # '(2 x^3 + -3 x)'
+  $str = $p->as_string($config);               # '(2 x^3 + -3 x)'
+
+  $str = $p->as_string({fold_sign => 1});      # '(2 x^3 - 3 x)'
+
+  $p->string_config({fold_sign => 1});
+  $str = "$p";                                 # '(2 x^3 - 3 x)'
+  $str = $p->as_string;                        # '(2 x^3 - 3 x)'
+
+  $p->string_config(undef);
+  $str = "$p";                                 # '(2 x^3 + -3 x)'
+
+  Math::Polynomial->string_config({fold_sign => 1});
+  $str = "$p";                                 # '(2 x^3 - 3 x)'
+
+  $config = $p->string_config;                 # undef
+  $config = Math::Polynomial->string_config;   # {fold_sign => 1}
+
+  $config = {
+    with_variable => 0,
+    ascending     => 1,
+    plus          => q{, },
+  };
+  $str = $p->as_string($config);               # '(0, -3, 0, 2)'
+
+  # examples of other coefficient spaces
+
+  use Math::Complex;
+  $c0 = Math::Complex->make(0, 3);
+  $c1 = Math::Complex->make(2, 1);
+  $p = Math::Polynomial->new($c0, $c1);        # p(x) == (2+i)*x + 3i
+  $p->string_config({
+    convert_coeff => sub {
+      my $coeff = "$_[0]";
+      if ($coeff =~ /[+-]/) {
+        $coeff = "($coeff)";
+      }
+      return $coeff;
+    },
+  });
+  print "$p\n";                                # prints ((2+i) x + 3i)
+
+  use Math::BigRat;
+  $c0 = Math::BigRat->new('-1/2');
+  $c1 = Math::BigRat->new('0');
+  $c2 = Math::BigRat->new('3/2');
+  $p = Math::Polynomial->new($c0, $c1, $c2);  # p(x) == 3/2*x**2 - 1/2
 
 =head1 DIAGNOSTICS
 
@@ -1482,9 +1596,9 @@ a list of coefficients, but not in array context.  The list of
 coefficients should be assigned to an array.  To retrieve a single
 coefficient, I<coeff> should be called with a degree argument.
 
-=item bad modulus operator
+=item bad modulo operator
 
-A modulus operator was passed to I<gcd> which turned out to violate
+A modulo operator was passed to I<gcd> and turned out to violate
 rules required by such an operator, like constraints on the degree
 of returned polynomials.
 
@@ -1496,39 +1610,31 @@ Math::Polynomial tries to safeguard against it.
 
 =item division by zero polynomial
 
-Some kind of polynomial division, like I<div>, I<mod>, I<divmod>
-or an expression with C</> or C<%> was attempted with a zero
-polynomial acting as denominator.  Division by a zero polynomial
-is not defined.
+Some kind of polynomial division, like I<div>, I<mod>, I<divmod>,
+I<inv_mod> or an expression with C</> or C<%> was attempted with a
+zero polynomial acting as denominator or modulus.  Division by a
+zero polynomial is not defined.
 
 =item exponent too large
 
-One of the methods I<pow>, I<shift_up>, I<make_monomial> or
-I<new_monomial> was called with arguments that would lead to a
-result with an excessively high degree.  You can tweak the class
-variable I<$max_degree> to change the actual limit.  Calculations
+One of the methods I<pow>, I<shift_up> or I<monomial> was called
+with arguments that would lead to a result with an excessively high
+degree.  You can tweak the class variable I<$max_degree> to change
+the actual limit or disable the check altogether.  Calculations
 involving large polynomials can consume a lot of memory and CPU
 time.  Exponent sanity checks help to avoid that from happening by
 accident.
 
 =item no such method: %s
 
-A modulus operator name was passed to I<gcd> which is not actually
+A modulo operator name was passed to I<gcd> which is not actually
 the name of a method.
 
 =item non-negative integer argument expected
 
 One of the methods expecting non-negative integer arguments, like
-I<pow>, I<shift_up>, I<shift_down>, I<slice>, I<make_monomial> or
-I<new_monomial>, got something else instead.
-
-=item object method invoked on a non-reference
-
-An object method, like I<make>, I<make_monomial> or I<interpolate>,
-was called as if it was a class method.  These methods should be
-invoked using the I<instance_variable>-E<gt>I<method_name> syntax.
-Class methods with similar functionality are available in most
-cases, as documented in the section on class methods.
+I<pow>, I<pow_mod>, I<shift_up>, I<shift_down>, I<slice> or
+I<monomial>, got something else instead.
 
 =item usage: %s
 
@@ -1542,34 +1648,170 @@ Usage messages give an example of the expected calling syntax.
 
 =item wrong operand type
 
-An arithmetic expression used an operation not defined for polynomials,
-such as a power with a polynomial exponent.
+An arithmetic expression used an operation not defined for polynomial
+objects, such as a power with a polynomial exponent.
 
 =item x values not disjoint
 
-One of the Lagrange interpolation methods (I<interpolated> or
-I<interpolate>) was called with at least two equal x-values.  Support
-points for this kind of interpolation must have distinct x-values.
+The I<interpolate> method was called with at least two equal x-values.
+Support points for this kind of interpolation must have distinct x-values.
 
 =back
 
-=head1 SEE ALSO
+=head1 EXTENSION GUIDELINES
+
+Math::Polynomial can be extended in different ways.  Subclasses may
+restrict coefficient spaces to facilitate certain application domains
+such as numerical analysis or channel coding or symbolic algebra.
+
+Special polynomials (such as Legendre, Chebyshev, Gegenbauer, Jacobi,
+Hermite, Laguerre polynomials etc.) may be provided by modules
+adding not much more than a bunch of funnily named constructors to
+the base class.
+
+Other modules may implement algorithms employing polynomials (such
+as approximation techniques) or analyzing them (such as root-finding
+techniques).
+
+The set of attributes that will be propagated from operands to
+expression results is designed to be extensible, too.  More detailed
+information as well as a couple of examples are supposed to be added
+in an upcoming release.
+
+Multivariate polynomials, finally, will presumably live in a class
+that is neither a base class nor a subclass of Math::Polynomial,
+as both subjects do not have enough in common to suggest otherwise.
+
+=head1 DEPENDENCIES
+
+This version of Math::Polynomial requires these other modules and
+libraries to run:
 
 =over 4
 
-=item Part of this distribution
+=item *
 
-  Math::Polynomial::Generic
+perl version 5.6.0 or higher
 
-=item Planned for release
+=item *
 
-  Math::Polynomial::Legendre
-  Math::Polynomial::Chebyshev
-  Math::Polynomial::Gegenbauer
-  Math::Polynomial::Jacobi
-  Math::Polynomial::Hermite
-  Math::Polynomial::Laguerre
-  Math::Polynomial::Roots::DurandKerner
+overload (usually bundled with perl)
+
+=back
+
+Additional requirements to run the test suite are:
+
+=over 4
+
+=item *
+
+Test (usually bundled with perl)
+
+=item *
+
+Math::Complex (usually bundled with perl)
+
+=item *
+
+File::Spec (usually bundled with perl)
+
+=item *
+
+File::Basename (usually bundled with perl)
+
+=item *
+
+FindBin (usually bundled with perl)
+
+=back
+
+Recommended modules for increased functionality are:
+
+=over 4
+
+=item *
+
+Math::Complex (usually bundled with perl)
+
+=item *
+
+Math::BigRat
+
+=back
+
+=head1 BUGS AND LIMITATIONS
+
+At the time of release, there were no known unresolved issues with
+this module.  Bug reports and suggestions are welcome -- please
+submit them through the CPAN RT,
+L<http://rt.cpan.org/NoAuth/ReportBug.html?Queue=Math-Polynomial>.
+
+=head1 SEE ALSO
+
+Part of this distribution:
+
+=over 4
+
+=item *
+
+Example scripts distributed with Math::Polynomial.
+
+Scripts in the examples directory cover module version differences,
+interpolation, rational coefficients, pretty-printing, and more.
+
+Scripts in the test suite are less wordily documented, but should have at
+least one usage example for each of even the most exotic features.
+
+=item *
+
+I<Math::Polynomial::Generic> -
+an experimental interface extension with some syntactical sugar
+coating Math::Polynomial.
+
+=back
+
+Modules planned for release:
+
+=over 4
+
+=item *
+
+I<Math::Polynomial::Orthogonal> -
+an extension providing constructors for many well-known kinds of
+orthogonal polynomials.
+
+=item *
+
+I<Math::Polynomial::Roots::DurandKerner> -
+an extension implementing the Weierstrass-(Durand-Kerner) numerical
+root-finding algorithm.
+
+=item *
+
+I<Math::Polynomial::Multivariate> -
+a complementary module dealing with polynomials in more than one variable.
+
+=item *
+
+I<Math::Polynomial::Parse> -
+an extension providing methods to create polynomial objects from strings.
+
+=back
+
+General Information:
+
+=over 4
+
+=item *
+
+Pages in category I<Polynomials> of Wikipedia.
+L<http://en.wikipedia.org/wiki/Category%3APolynomials>
+
+=item *
+
+Weisstein, Eric W. "Polynomial."
+From MathWorld--A Wolfram Web Resource.
+L<http://mathworld.wolfram.com/Polynomial.html>
 
 =back
 
@@ -1579,15 +1821,19 @@ Martin Becker, E<lt>becker-cpan-mp@cozap.comE<gt>
 
 =head1 ACKNOWLEDGEMENTS
 
-Mats Kindahl, E<lt>mats@kindahl.netE<gt>, wrote an earlier version
-of this module and maintained it 1997-2007.
+This module was inspired by a module of the same name written and
+maintained by Mats Kindahl, E<lt>mats@kindahl.netE<gt>, 1997-2007,
+who kindly passed it on to the author for maintenance and improvement.
+
+Additional suggestions and bug reports came from Thorsten Dahlheimer
+and Kevin Ryde.
 
 =head1 LICENSE AND COPYRIGHT
 
 Copyright (c) 2007-2009 by Martin Becker.  All rights reserved.
 
 This library is free software; you can redistribute it and/or modify
-it under the same terms as Perl itself, either Perl version 5.6 or,
+it under the same terms as Perl itself, either Perl version 5.6.0 or,
 at your option, any later version of Perl 5 you may have available.
 
 =head1 DISCLAIMER OF WARRANTY

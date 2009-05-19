@@ -1,9 +1,17 @@
 Revision history for Perl extension Math::Polynomial.
 
-		    Math::Polynomial Version 1.000
-		    ------------------------------
+                    Math::Polynomial Version 1.001
+                    ------------------------------
 
-- Release date: 2009-04-28
+- Release date: 2009-05-19
+
+- Repackaged after Math-Polynomial-1.000.tar.gz had file transmission
+  problems on its way to CPAN.
+
+                    Math::Polynomial Version 1.000
+                    ------------------------------
+
+- Release date: 2009-05-19
 
 - Author: Martin Becker
 
@@ -13,22 +21,22 @@ Revision history for Perl extension Math::Polynomial.
 - Usable coefficient spaces are now any object classes with
   well-defined basic arithmetic operations and equality checks.
 
-- Degrees of coefficients in new() are now in ascending order and
-  therefore equivalent to array indexes.
-
-- Objects are now immutable.
-
-- Removed clone() method which would be useless for immutable objects.
+- Objects are now essentially immutable.  The only property that
+  may be changed dynamically configures formatting defaults.
+  Thus, cloning is hardly ever necessary.
 
 - Removed tidy() and size() methods and dropped tidiness concept, as it
   bore no mathematical significance.
+
+- Degrees of coefficients in new() are now in ascending order and
+  therefore equivalent to array indexes.
 
 - Added monomial constructor.
 
 - Changed Lagrange interpolation to take arrays of x- and y-values.
 
-- Added object method usage of constructors, to share coefficient space
-  and stringification attributes.
+- Extended constructors to borrow coefficient space and stringification
+  attributes when used as object methods.
 
 - Added usage of coeff() without parameter, yielding list of all coefficients.
 
@@ -43,22 +51,24 @@ Revision history for Perl extension Math::Polynomial.
 
 - Renamed quotrem() operator to divmod().
 
-- Added overloaded operators: ! ** << >> == !=
+- Added overloaded operators: bool ! ** << >> == !=
 
-- Added operators: is_equal(), is_unequal(), add_const(), sub_const(),
-  mul_const(), div_const(), pow(), pow_mod(), shift_up(), shift_down(),
-  slice(), monize(), mmod(), gcd(), xgcd(), differentiate(), integrate(),
-  definite_integral().
+- Added methods: is_nonzero(), is_equal(), is_unequal(), is_monic(),
+  add_const(), sub_const(), mul_const(), div_const(), pow(), pow_mod(),
+  inv_mod(), shift_up(), shift_down(), slice(), monize(), mmod(), gcd(),
+  xgcd(), differentiate(), integrate(), definite_integral().
 
 - Renamed eval() method to evaluate() and sub() method to sub_().
 
 - Removed configure() class method, renamed to_string() method to
   as_string() and added optional configuration parameter.
 
-- Added a plethora of configuration options for string representation.
+- Added lots of configuration options for string representation.
 
-- Added string_config method to configure as_string default behaviour
+- Added string_config() method to configure as_string default behaviour
   globally and per object.
+
+- Added $max_degree class variable to configure parameter sanity tests.
 
 - Changed internal object structure to improve extensibility.
 
@@ -66,13 +76,11 @@ Revision history for Perl extension Math::Polynomial.
 
 - Reworked pod documentation.
 
-- Trashed previous contents of examples directory, added new examples.
-
 - Added experimental module Math::Polynomial::Generic.
 
 
-		    Math::Polynomial Version 0.04
-		    -----------------------------
+                    Math::Polynomial Version 0.04
+                    -----------------------------
 
 - Release date: 2007-07-12
 
@@ -109,8 +117,8 @@ Revision history for Perl extension Math::Polynomial.
 
 - Added development status notice to README.
 
-		    Math::Polynomial Version 0.03
-		    -----------------------------
+                    Math::Polynomial Version 0.03
+                    -----------------------------
 
 - Release date: 2001-02-23.
 
@@ -133,16 +141,16 @@ Revision history for Perl extension Math::Polynomial.
   tightly coupled to the Math::Polynomial package.
 
 
-		    Math::Polynomial Version 0.02
-		    -----------------------------
+                    Math::Polynomial Version 0.02
+                    -----------------------------
 
 - Release date: 1998-08-13.
 
 - Fixed a bug that caused erroneous behaviour when 0 was used in the
   interpolation routine.
 
-		    Math::Polynomial Version 0.01
-		    -----------------------------
+                    Math::Polynomial Version 0.01
+                    -----------------------------
 
 - Release date: 1997-09-11.
 

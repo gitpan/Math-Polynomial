@@ -1,15 +1,19 @@
-# Copyright (c) 2007-2008 Martin Becker.  All rights reserved.
+# Copyright (c) 2007-2009 Martin Becker.  All rights reserved.
 # This package is free software; you can redistribute it and/or modify it
 # under the same terms as Perl itself.
+#
+# $Id: 03_expressions.t 30 2009-05-19 13:48:07Z demetri $
+
+# Checking arithmetic operators and expressions.
 
 # Before `make install' is performed this script should be runnable with
-# `make test'. After `make install' it should work as `perl 03_expressions.t'
+# `make test'. After `make install' it should work as `perl t/03_expressions.t'
 
 #########################
 
 use strict;
 use Test;
-BEGIN { plan tests => 182 };
+BEGIN { plan tests => 198 };
 use Math::Polynomial 1.000;
 ok(1);  # module loaded
 
@@ -51,6 +55,25 @@ ok(defined $bool);      # !c is defined
 ok($zp->degree < 0);    # zp is the zero polynomial
 $bool = !$zp;
 ok($bool);              # !zp is true
+
+$bool = 0;
+while ($p) {
+    $bool = 1;
+    last;
+}
+ok($bool);              # p is true;
+
+$bool = 1;
+while ($zp) {
+    $bool = 0;
+    last;
+}
+ok($bool);              # zp is false;
+
+ok(!$p->is_zero);
+ok($p->is_nonzero);
+ok($zp->is_zero);
+ok(!$zp->is_nonzero);
 
 my $pp = $p->new(-0.25, 0, 1.25);
 
@@ -386,14 +409,33 @@ ok(has_coeff($qq, -0.25));              # q(0)
 $qq = $zp->nest($p);
 ok(has_coeff($qq));                     # 0(p)
 
-$qq = $q->monize;
-ok(has_coeff($qq, -1, 0, 1));           # monize q
+$bool = $q->is_monic;
+ok(!$bool);                             # q is not monic
+$pp = $q->monize;
+ok(has_coeff($pp, -1, 0, 1));           # monize q
+$bool = $pp->is_monic;
+ok($bool);                              # x**2-1 is monic
+$qq = $pp->monize;
+ok($qq == $pp);                         # monize monic pp
 $qq = $c->monize;
 ok(has_coeff($qq, 1));                  # monize c
 $qq = eval { $zp->monize };
 ok(has_coeff($qq));                     # monize 0
+$bool = $zp->is_monic;
+ok(defined $bool);                      # is_monic defined for zp
+ok(!$bool);                             # zp is not monic
+
+# mutators
+
+$pp = Math::Polynomial->new(1, 10);
+$qq = $pp;
+$pp += $pp;
+ok(has_coeff($pp, 2, 20));               # += working
+ok(has_coeff($qq, 1, 10));               # += no side effects
 
 # diagnostics
+
+ok(10_000 == $Math::Polynomial::max_degree);
 
 $Math::Polynomial::max_degree = 9;
 
@@ -403,11 +445,21 @@ ok(has_coeff($qq, 0, 0, 0, -1, 0, 3, 0, -3, 0, 1));
 $pp = $p->new(0, 4, 0, -5, 0, 1);
 $qq = eval { $pp ** 2 };
 ok(!defined($qq) && $@ && $@ =~ /exponent too large/);
+$qq = eval {
+    local $Math::Polynomial::max_degree;
+    $pp ** 2
+};
+ok(defined($qq) && $q->isa('Math::Polynomial'));
 
 $qq = eval { $pp << 4 };
 ok(has_coeff($qq, 0, 0, 0, 0, 0, 4, 0, -5, 0, 1));
 $qq = eval { $pp << 5 };
 ok(!defined($qq) && $@ && $@ =~ /exponent too large/);
+$qq = eval {
+    local $Math::Polynomial::max_degree;
+    $pp << 5
+};
+ok(defined($qq) && $q->isa('Math::Polynomial'));
 
 $qq = eval { $p->divmod($p) };
 ok(!defined($qq) && $@ && $@ =~ /array context required/);

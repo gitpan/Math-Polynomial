@@ -1,9 +1,14 @@
-# Copyright (c) 2007-2008 Martin Becker.  All rights reserved.
+# Copyright (c) 2007-2009 Martin Becker.  All rights reserved.
 # This package is free software; you can redistribute it and/or modify it
 # under the same terms as Perl itself.
+#
+# $Id: 12_gf3.t 30 2009-05-19 13:48:07Z demetri $
+
+# Checking compatibility with some non-standard coefficient space.
+# The particular space here is the three-element Galois field GF3.
 
 # Before `make install' is performed this script should be runnable with
-# `make test'. After `make install' it should work as `perl 12_gf3.t'
+# `make test'. After `make install' it should work as `perl t/12_gf3.t'
 
 package GF3;
 
@@ -48,9 +53,9 @@ package main;
 
 use strict;
 use Test;
-BEGIN { plan tests => 10 };
+BEGIN { plan tests => 11 };
 use Math::Polynomial 1.000;
-ok(1);	# Math::Polynomial loaded
+ok(1);  # Math::Polynomial loaded
 
 #########################
 
@@ -59,8 +64,8 @@ sub enum {
     my ($n) = @_;
     my @r = ();
     while ($n) {
-	push @r, $n % 3;
-	$n /= 3;
+        push @r, $n % 3;
+        $n /= 3;
     }
     return map { GF3->new($_) } @r;
 }
@@ -71,12 +76,12 @@ sub is_primitive {
     my $one = $p->coeff_one;
     my $max = 3 ** $p->degree - 1;
     foreach my $n (grep { !($max % $_) } 1..$max) {
-	my $q = $p->monomial($n)->sub_const($one);
-	if (!($q % $p)) {
-	    return $n == $max;
-	}
+        my $q = $p->monomial($n)->sub_const($one);
+        if (!($q % $p)) {
+            return $n == $max;
+        }
     }
-    return undef;
+    return 0;
 }
 
 Math::Polynomial->string_config( { fold_sign => 1, leading_plus => '+ ' } );
@@ -86,22 +91,22 @@ my $one = GF3->new(1);
 my $two = GF3->new(2);
 
 my $p = Math::Polynomial->new($nil, $one, $two);
-ok('(- x^2 + x)' eq "$p");	# new & stringification
+ok('(- x^2 + x)' eq "$p");      # new & stringification
 
 my $q = $p->new($one, $two, $nil, $two, $one);
-ok('(+ x^4 - x^3 - x + e)' eq "$q");	# new & stringification
+ok('(+ x^4 - x^3 - x + e)' eq "$q");    # new & stringification
 
 my $r = $p->gcd($q)->monize;
-ok('(+ x - e)' eq "$r");	# gcd & monize
+ok('(+ x - e)' eq "$r");        # gcd & monize
 
 my @monic1 = map { Math::Polynomial->new(enum($_)) } 3..5;
 my @monic3 = map { Math::Polynomial->new(enum($_)) } 27..53;
 my @irred3 = grep { my $p = $_; !grep { !($p % $_) } @monic1 } @monic3;
 
-ok(8 == @irred3);	# number of irreducibles
+ok(8 == @irred3);       # number of irreducibles
 
 my @prim3 = grep { is_primitive($_) } @irred3;
-ok(4 == @prim3);	# number of primitives
+ok(4 == @prim3);        # number of primitives
 
 my $ok = 1;
 foreach my $gen (@prim3) {
@@ -109,37 +114,40 @@ foreach my $gen (@prim3) {
     my $x   = $gen->new($nil, $one);
     my $exp = $x;
     foreach my $n (1..25) {
-	$ok &&= $c1 != $exp;
-	($exp *= $x) %= $gen;
+        $ok &&= $c1 != $exp;
+        ($exp *= $x) %= $gen;
     }
     $ok &&= $c1 == $exp;
 }
-ok($ok);	# primitive-ness
+ok($ok);        # primitive-ness
 
 $ok = 1;
 my @x = ($nil, $one, $two);
 foreach my $y2 (@x) {
     foreach my $y1 (@x) {
-	foreach my $y0 (@x) {
-	    my @y  = ($y0, $y1, $y2);
-	    my $ip = Math::Polynomial->interpolate(\@x, \@y);
-	    $ok &&= 3 == grep { $y[$_] == $ip->evaluate($x[$_]) } 0..2;
-	}
+        foreach my $y0 (@x) {
+            my @y  = ($y0, $y1, $y2);
+            my $ip = Math::Polynomial->interpolate(\@x, \@y);
+            $ok &&= 3 == grep { $y[$_] == $ip->evaluate($x[$_]) } 0..2;
+        }
     }
 }
-ok($ok);	# interpolations
+ok($ok);        # interpolations
 
-my ($ok1, $ok2) = (1, 1);
-my $gen = $prim3[0];
+my ($ok1, $ok2, $ok3) = (1, 1, 1);
+my $gen = @prim3? $prim3[0]: $monic3[7];
 my $c1  = $gen ** 0;
 foreach my $p (map { $gen->new(enum($_)) } 1..25) {
     my $q = $p->pow_mod(25, $gen);
     my $r = $p->mul($q)->mod($gen);
-    my ($d, $s) = ($gen->xgcd($p))[0, 2];
+    my $s = eval { $p->inv_mod($gen) };
+    my ($d, $f) = ($gen->xgcd($p))[0, 2];
     $ok1 &&= $r->is_equal($c1);
-    $ok2 &&= $q->is_equal($s->div($d));
+    $ok2 &&= $q->is_equal($f->div($d));
+    $ok3 &&= defined($s) && $q->is_equal($s);
 }
-ok($ok1);	# inverses using Little Fermat
-ok($ok2);	# inverses using Chinese Remainder
+ok($ok1);       # inverses using Little Fermat
+ok($ok2);       # inverses using Chinese Remainder
+ok($ok3);       # inverses using inv_mod
 
 __END__

@@ -1,19 +1,29 @@
-# Copyright (c) 2008 Martin Becker.  All rights reserved.
+# Copyright (c) 2008-2009 Martin Becker.  All rights reserved.
 # This package is free software; you can redistribute it and/or modify it
 # under the same terms as Perl itself.
+#
+# $Id: MyUtils.pm 8 2009-05-12 14:03:18Z demetri $
 
-# $Id$
+# Utility functions for tests:
+# * conditionally skip tests if required modules are not available
+# * conditionally skip tests intended for the maintainer only
+# * conditionally skip tests if some file cannot be read into a string
+# * fetch an executable file name of the perl binary currently running
 
 package Test::MyUtils;
 
 use 5.006;
 use strict;
+use File::Basename qw(dirname);
+use Config;
 use base 'Exporter';
 
-our $VERSION      = '0.001';
-our @EXPORT       = qw(use_or_bail maintainer_only);
+our $VERSION   = '0.003';
+our @EXPORT    = qw(use_or_bail maintainer_only);
+our @EXPORT_OK = qw(slurp_or_bail this_perl);
 
-our $DISTRIBUTION = 'Math-Polynomial';
+our $DIST_NAME    = 'Math-Polynomial';
+our $MAX_FILESIZE = 1024 * 1024;
 
 sub _skip_all {
     my ($reason) = @_;
@@ -21,24 +31,83 @@ sub _skip_all {
     exit 0;
 }
 
+# To enforce a minimum version of a module, supply a $version value.
+# To use a module with default imports, omit $imports_ref.
+# To use a module with explicit or no imports, suppply an array reference.
 sub use_or_bail {
-    my ($module, $version, @imports) = @_;
+    my ($module, $version, $imports_ref) = @_;
 
-    eval "require $module";
-    _skip_all("$module not available") if $@;
+    if (!eval "require $module") {
+        _skip_all("$module not available");
+    }
 
-    eval {
-	VERSION $module $version if defined $version;
-	package main;
-	import $module @imports;
-    };
-    _skip_all("$module version $version or higher not available") if $@;
+    if (defined($version) && !defined eval { $module->VERSION($version) }) {
+        _skip_all("$module version $version or higher not available");
+    }
+
+    if (!$imports_ref || @{$imports_ref}) {
+        my $package = caller;
+        my @imports = $imports_ref? @{$imports_ref}: ();
+        if (!eval "package $package; \$module->import(\@imports); 1") {
+            my $error = $@;
+            $error =~ s/\n.*//s;
+            _skip_all("import of $module failed: $error");
+        }
+    }
+    return 1;
 }
 
+# Call this before plan() in test scripts reserved for the maintainer.
+# Add names of mandatory configuration features for further restrictions.
 sub maintainer_only {
-    my $env_maint = uc "MAINTAINER_OF_$DISTRIBUTION";
-    $env_maint =~ s/\W+/_/g;
-    $ENV{$env_maint} or _skip_all("setenv $env_maint=1 to run these tests");
+    my @required_features = @_;
+    my $env_maint = 'MAINTAINER_OF_' . uc $DIST_NAME;
+    $env_maint =~ s/[_\W]+/_/g;
+    if (!$ENV{$env_maint}) {
+        _skip_all("setenv $env_maint=1 to run these tests");
+    }
+    foreach my $feature (@required_features) {
+        if (!$Config{$feature}) {
+            _skip_all("feature not available: $feature");
+        }
+    }
+    return 1;
+}
+
+# Call this before plan() in test scripts analysing some file.
+# Return value is the file content.  Returns only on success.
+sub slurp_or_bail {
+    my ($filename) = @_;
+    local $/;
+    my $fh;
+    my $result;
+    my $err;
+    if (! -f $filename) {
+        $err = 'not a plain file';
+    }
+    elsif ($MAX_FILESIZE < -s _) {
+        $err = 'file is too large';
+    }
+    elsif (open $fh, '<', $filename) {
+        defined($result = <$fh>) or $err = $!;
+        close $fh;
+    }
+    else {
+        $err = $!;
+    }
+    if (!defined $result) {
+        _skip_all("$filename: cannot slurp: $err");
+    }
+    return $result;
+}
+
+sub this_perl {
+    my $this_perl = $Config{'perlpath'};
+    my $suffix    = exists($Config{'_exe'})? $Config{'_exe'}: '';
+    if ($^O ne 'VMS' && '' ne $suffix && $this_perl !~ /$suffix\z/) {
+        $this_perl .= $suffix;
+    }
+    return $this_perl;
 }
 
 1;
