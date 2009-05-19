@@ -1,0 +1,53 @@
+This file contains message digests of all files listed in MANIFEST,
+signed via the Module::Signature module, version 0.55.
+
+To verify the content in this distribution, first make sure you have
+Module::Signature installed, then type:
+
+    % cpansign -v
+
+It will check each file's integrity, as well as the signature's
+validity.  If "==> Signature verified OK! <==" is not displayed,
+the distribution may already have been compromised, and you should
+not run its Makefile.PL or Build.PL.
+
+-----BEGIN PGP SIGNED MESSAGE-----
+Hash: SHA1
+
+SHA1 9b96eed199092dc2848c31f61d3c6112c988e114 Changes
+SHA1 8ef3b1d316da93e52310b84c6c47c3420bb8b16d MANIFEST
+SHA1 16f22029c805e113b348da91e2ba3b09a4af6a5e META.yml
+SHA1 140468801bb547d3ed4ffa0c3f9bacd046c2e436 Makefile.PL
+SHA1 dad0c4d18940d335a18ac98ce1df394b63f9c475 README
+SHA1 d82ba496da16a6e50e823f9408d5434f33fce5ac examples/horner.pl
+SHA1 0eb7af68360c2fd4d3c11da442faf408af90e3d7 examples/legendre.pl
+SHA1 991b515de1732853e5c8f51aef04ebd0f9f57d1a lib/Math/Polynomial.pm
+SHA1 e2fdd28e309ad1511b463b851a92da3dc220f6f2 lib/Math/Polynomial/Generic.pm
+SHA1 ccb91d3f13b7c52fb3d015c59adb99f95bc54b90 t/01_load.t
+SHA1 0b3f91fe355c097094dfeccd7bc252632c8c93c2 t/02_basics.t
+SHA1 31805fb61848f920d2cf84624712ba3267ee5476 t/03_expressions.t
+SHA1 71bcafd3a4699368212957edc5f9f344e212e16b t/04_lagrange.t
+SHA1 c41378eb6878f8a6bfd23895b1e837a927ea7782 t/05_euclid.t
+SHA1 4da126240d3d8fbea9038acdc66b0d542033059b t/06_calculus.t
+SHA1 dfaff5b33763a72593568bdd1b5f9448e63fb9c1 t/07_strings.t
+SHA1 87eab009b0c234ff5e3171e730a2e0dfd92da42a t/08_generic.t
+SHA1 94da8bc255240a529a0eefac52544ad8288d471f t/10_math_complex.t
+SHA1 cd68e7c1472f9af4ee7b69e579b4a086282183fe t/11_math_bigrat.t
+SHA1 258a8ee17d2d390b9463f1842cd4c5e673be350c t/12_gf3.t
+SHA1 670f97baa56fe76358c06f2fa5c3279599c7fc0a t/20_extensions.t
+SHA1 65a091781666664c466a387abe995d813590e934 t/90_pod.t
+SHA1 d68a7896bc4293401c1e6378ac28f64f9583600c t/91_pod_cover.t
+SHA1 f4545bc440e66058105e47a0f0d9f1f6c4d6e644 t/92_consistency.t
+SHA1 279b73f15172b089148f246eedd25f241a1b4257 t/93_signature.t
+SHA1 39dd61d45e4f37e32ab429317bae63049f204d3b t/lib/Test/MyUtils.pm
+-----BEGIN PGP SIGNATURE-----
+Version: GnuPG v1.4.9 (FreeBSD)
+
+iQEcBAEBAgAGBQJJ9xtxAAoJEGH3bZuRPycNBpAIAMIKejjS/pTiUuiLWg3z7w/D
+ua3x8A1yeb0e5d3nOB4TAw88SkLLGO6UqLDUyQiwFNxR/V1PQka6DCUKfpDzVxoW
+sblmp8Ho7cMgPn2CbmBpbFzGJgy+RV1wHX7vDKKmIAToK5lDjJ8fywYE16wTC1dD
+PR8k4UOje8poVs75EXVGrniAusSMi2+Tk0p4DApD6khavWhIT0vGGou2OQEVXNqB
+edk3MI1EQgHPJrgB6577C90yteUp+SONhmJafmznUeoAuAmTxo7Xk3dS5Qcc1j5T
+DZPTJ9xKwvQxaNPS3j3KdVJ+cnN9gkTzTL7p5XkVLESOSX/vsXG6+S6lAed5kao=
+=XrdT
+-----END PGP SIGNATURE-----

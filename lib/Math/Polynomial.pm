@@ -1,661 +1,1599 @@
-# Copyright (c) 2007 Martin Becker. All rights reserved.
+# Copyright (c) 2007-2008 by Martin Becker.  All rights reserved.
+# This package is free software; you can redistribute it and/or modify it
+# under the same terms as Perl itself.
 #
-# This module is free software; you can redistribute it and/or
-# modify it under the same terms as Perl itself.
+# $Id$
 
 package Math::Polynomial;
 
-use 5.005;
+use 5.006;
 use strict;
-use base qw(Exporter);
-use vars qw($VERSION @EXPORT_OK);
-use Carp;
+use Carp qw(croak);
 
-use overload
-    '+' => \&plus,
-    '-' => \&minus,
-    'neg' => \&neg,
-    '*' => \&times,
-    '/' => sub { (&quotrem)[0] },
-    '%' => sub { (&quotrem)[1] },
-    '""' => \&to_string;
+require overload;
 
-$VERSION = '0.04';
+overload->import(
+    q{neg}      => 'neg',
+    q{+}        => _binary('add'),
+    q{-}        => _binary('sub_'),
+    q{*}        => _binary('mul'),
+    q{/}        => _binary('div'),
+    q{%}        => _binary('mod'),
+    q{**}       => _lefty('pow'),
+    q{<<}       => _lefty('shift_up'),
+    q{>>}       => _lefty('shift_down'),
+    q{!}        => 'is_zero',
+    q{==}       => _binary('is_equal'),
+    q{!=}       => _binary('is_unequal'),
+    q{""}       => 'as_string',
+    q{fallback} => undef,       # auto-generate trivial substitutions
+);
 
-# plain subroutines may be exported.
-@EXPORT_OK = qw(quotrem interpolate);
+# ----- object definition -----
+
+# Math::Polynomial=ARRAY(...)
+
+# .......... index ..........   # .......... value ..........
+use constant F_COEFF  => 0;     # coefficients arrayref, ascending degree
+use constant F_ZERO   => 1;     # zero element of coefficient space
+use constant F_ONE    => 2;     # unit element of coefficient space
+use constant F_CONFIG => 3;     # default stringification configuration
+use constant NFIELDS  => 4;
+
+# ----- static data -----
+
+our $VERSION     = '1.000';
+our $max_degree  = 1_000_000;   # limit for power operator
+
+# default values for as_string options
+my @string_defaults = (
+    ascending     => 0,
+    with_variable => 1,
+    fold_sign     => 0,
+    fold_zero     => 1,
+    fold_one      => 1,
+    fold_exp_zero => 1,
+    fold_exp_one  => 1,
+    convert_coeff => sub { "$_[0]" },
+    plus          => q{ + },
+    minus         => q{ - },
+    leading_plus  => q{},
+    leading_minus => q{- },
+    times         => q{ },
+    power         => q{^},
+    variable      => q{x},
+    prefix        => q{(},
+    suffix        => q{)},
+);
+
+my $global_string_config = {};
+
+# ----- private/protected subroutines -----
+
+# generic polynomial detection hook (see Math::Polynomial::Generic)
+sub _is_generic {
+    return 0;
+}
+
+# binary operator wrapper generator
+# generates functions to be called via overload:
+# - upgrading a non-polynomial operand to a compatible polynomial
+# - casting a generic operand if appropriate
+# - restoring the original operand order
+sub _binary {
+    my ($method) = @_;
+    return sub {
+        my ($this, $that, $reversed) = @_;
+        if (!ref($that) || !eval { $that->isa('Math::Polynomial') }) {
+            if ($this->_is_generic) {
+                $that = Math::Polynomial->new($that);
+            }
+            else {
+                $that = $this->new($that);
+            }
+        }
+        if ($this->_is_generic) {
+            if (!$that->_is_generic) {
+                $this = $this->_cast($that);
+            }
+        }
+        elsif ($that->_is_generic) {
+            $that = $that->_cast($this);
+        }
+        if ($reversed) {
+            ($this, $that) = ($that, $this);
+        }
+        return $this->$method($that);
+    };
+}
+
+# asymmetrically prototyped binary operator wrapper generator
+# generates functions to be called via overload:
+# - disallowing reverse order of operands
+sub _lefty {
+    my ($method) = @_;
+    return sub {
+        my ($this, $that, $reversed) = @_;
+        croak 'wrong operand type' if $reversed;
+        return $this->$method($that);
+    };
+}
+
+# integer argument checker
+# - make sure arguments are non-negative integer numbers
+sub _check_int {
+    foreach my $arg (@_) {
+        eval {
+            use warnings FATAL => 'all';
+            $arg == abs int $arg
+        } or croak 'non-negative integer argument expected';
+    }
+}
+
+# ----- methods -----
+
+sub new {
+    my ($this, @coeff) = @_;
+    my $class = ref $this;
+    my ($zero, $one, $config);
+    if ($class) {
+        $zero   = $this->coeff_zero;
+        $one    = $this->coeff_one;
+        $config = $this->string_config;
+    }
+    else {
+        my $sample = @coeff? $coeff[-1]: 1;
+        $zero   = $sample - $sample;
+        $one    = $sample ** 0;
+        $config = undef;
+        $class  = $this;
+    }
+    while (@coeff && $zero == $coeff[-1]) {
+        pop @coeff;
+    }
+    return bless [\@coeff, $zero, $one, $config], $class;
+}
+
+sub monomial {
+    my ($this, $degree, $coeff) = @_;
+    my $zero;
+    _check_int($degree);
+    croak 'exponent too large' if $degree > $max_degree;
+    if (ref $this) {
+        $coeff = $this->coeff_one if !defined $coeff;
+        $zero  = $this->coeff_zero;
+    }
+    else {
+        $coeff = 1 if !defined $coeff;
+        $zero  = $coeff - $coeff;
+    }
+    return $this->new(($zero) x $degree, $coeff);
+}
+
+sub string_config {
+    my ($this, $config) = @_;
+    if (ref $this) {
+        if (2 <= @_) {
+            $this->[F_CONFIG] = $config;
+        }
+        else {
+            $config = $this->[F_CONFIG];
+        }
+    }
+    else {
+        if (2 <= @_) {
+            # note: do not undefine ultimate fallback configuration
+            $global_string_config = $config || {};
+        }
+        else {
+            $config = $global_string_config;
+        }
+    }
+    return $config;
+}
+
+sub interpolate {
+    my ($this, $xvalues, $yvalues) = @_;
+    if (
+        !ref($xvalues) || !ref($yvalues) || @{$xvalues} != @{$yvalues}
+    ) {
+        croak 'usage: $q = $p->interpolate([$x1, $x2, ...], [$y1, $y2, ...])';
+    }
+    return $this->new if !@{$xvalues};
+    if (!ref $this) {
+        $this = $this->new( $xvalues->[-1] );
+    }
+    my $result = undef;
+    my $one = $this->coeff_one;
+    my @delta = map { $this->new(-$_, $one) } @{$xvalues};
+    foreach my $i (0..$#{$xvalues}) {
+        my ($x, $y) = ($xvalues->[$i], $yvalues->[$i]);
+        my $term = undef;
+        foreach my $ii (0..$#{$xvalues}) {
+            if ($i != $ii) {
+                my $xx = $xvalues->[$ii];
+                croak 'x values not disjoint' if $x == $xx;
+                $term = defined($term)? $term->mul($delta[$ii]): $delta[$ii];
+            }
+        }
+        $term =
+            defined($term)?
+                $term->mul_const($y / $term->evaluate($x)):
+                $this->new($y);
+        $result = $i? $result->add($term): $term;
+    }
+    return $result;
+}
+
+sub coeff {
+    my ($this, $degree) = @_;
+    if (defined $degree) {
+        return
+            0 <= $degree && $degree < @{$this->[F_COEFF]}?
+                $this->[F_COEFF]->[$degree]:
+                $this->[F_ZERO];
+    }
+    croak 'array context required if called without argument' if !wantarray;
+    return @{$this->[F_COEFF]};
+}
+
+sub coeff_zero { return $_[0]->[F_ZERO]; }
+sub coeff_one  { return $_[0]->[F_ONE]; }
+
+sub coefficients {
+    my ($this) = @_;
+    croak 'array context required' if !wantarray;
+    return $this->is_zero? ($this->coeff_zero): $this->coeff;
+}
+
+sub degree     { return $#{ $_[0]->[F_COEFF] }; }
+
+sub proper_degree {
+    my ($this) = @_;
+    my $degree = $this->degree;
+    return 0 <= $degree? $degree: undef;
+}
+
+sub evaluate {
+    my ($this, $x) = @_;
+    my $i = $this->degree;
+    my $result = 0 <= $i? $this->coeff($i): $this->coeff_zero;
+    while (0 <= --$i) {
+        $result = $x * $result + $this->coeff($i);
+    }
+    return $result;
+}
+
+sub nest {
+    my ($this, $that) = @_;
+    my $i = $this->degree;
+    my $result = $that->new;
+    while (0 <= $i) {
+        $result = $result->mul($that)->add_const($this->coeff($i));
+        --$i;
+    }
+    return $result;
+}
+
+sub is_zero {
+    my ($this) = @_;
+    return $this->degree < 0;
+}
+
+sub is_equal {
+    my ($this, $that) = @_;
+    my $i = $this->degree;
+    my $eq = $i == $that->degree;
+    while ($eq && 0 <= $i) {
+        $eq = $this->coeff($i) == $that->coeff($i);
+        --$i;
+    }
+    return $eq;
+}
+
+sub is_unequal {
+    my ($this, $that) = @_;
+    my $i = $this->degree;
+    my $eq = $i == $that->degree;
+    while ($eq && 0 <= $i) {
+        $eq = $this->coeff($i) == $that->coeff($i);
+        --$i;
+    }
+    return !$eq;
+}
+
+sub neg {
+    my ($this) = @_;
+    return $this if $this->degree < 0;
+    return $this->new( map { -$_ } $this->coeff );
+}
+
+sub add {
+    my ($this, $that) = @_;
+    my $this_d = $this->degree;
+    my $that_d = $that->degree;
+    my $min_d  = $this_d <= $that_d? $this_d: $that_d;
+    return $this->new(
+        (map { $this->coeff($_) + $that->coeff($_) } 0..$min_d),
+        (map { $this->coeff($_) } $that_d+1 .. $this_d),
+        (map { $that->coeff($_) } $this_d+1 .. $that_d),
+    );
+}
+
+sub sub_ {
+    my ($this, $that) = @_;
+    my $this_d = $this->degree;
+    my $that_d = $that->degree;
+    my $min_d  = $this_d <= $that_d? $this_d: $that_d;
+    return $this->new(
+        (map {  $this->coeff($_) - $that->coeff($_) } 0..$min_d),
+        (map {  $this->coeff($_) } $that_d+1 .. $this_d),
+        (map { -$that->coeff($_) } $this_d+1 .. $that_d),
+    );
+}
+
+sub mul {
+    my ($this, $that) = @_;
+    my $this_d = $this->degree;
+    return $this if $this_d < 0;
+    my $that_d = $that->degree;
+    return $this->new(
+        map {
+            my ($i, $j) = $_ <= $this_d? ($_, 0): ($this_d, $_-$this_d);
+            my $sum = $this->coeff($i) * $that->coeff($j);
+            while ($i > 0 && $j < $that_d) {
+                $sum += $this->coeff(--$i) * $that->coeff(++$j);
+            }
+            $sum
+        } $that_d < 0? (): (0 .. $this_d+$that_d)
+    );
+}
+
+sub divmod {
+    my ($this, $that) = @_;
+    croak 'array context required' if !wantarray;
+    my @den  = $that->coeff;
+    @den or croak 'division by zero polynomial';
+    my $hd   = pop @den;
+    my @rem  = $this->coeff;
+    my @quot = ();
+    my $i    = $#rem - @den;
+    while (0 <= $i) {
+        my $q = $quot[$i] = pop(@rem) / $hd;
+        my $j = $i--;
+        foreach my $d (@den) {
+            $rem[$j++] -= $q * $d;
+        }
+    }
+    return ($this->new, $this) if !@quot;
+    return ($this->new(@quot), $this->new(@rem));
+}
+
+sub div { return ((shift)->divmod(@_))[0]; }
+sub mod { return ((shift)->divmod(@_))[1]; }
+
+sub mmod {
+    my ($this, $that) = @_;
+    my @den  = $that->coeff;
+    @den or croak 'division by zero polynomial';
+    my $hd   = pop @den;
+    my @rem  = $this->coeff;
+    my $i    = $#rem - @den;
+    while (0 <= $i) {
+        my $q = pop(@rem);
+        my $j = 0;
+	while ($j < $i) {
+            $rem[$j++] *= $hd;
+	}
+        foreach my $d (@den) {
+            ($rem[$j++] *= $hd) -= $q * $d;
+        }
+	--$i;
+    }
+    return $this->new(@rem);
+}
+
+sub add_const {
+    my ($this, $const) = @_;
+    return $this->new($const) if $this->is_zero;
+    my $i = 0;
+    return $this->new( map { $i++? $_: $_ + $const } $this->coeff );
+}
+
+sub sub_const {
+    my ($this, $const) = @_;
+    return $this->new(-$const) if $this->is_zero;
+    my $i = 0;
+    return $this->new( map { $i++? $_: $_ - $const } $this->coeff );
+}
+
+sub mul_const {
+    my ($this, $factor) = @_;
+    return $this->new( map { $_ * $factor } $this->coeff );
+}
+
+sub div_const {
+    my ($this, $divisor) = @_;
+    croak 'division by zero' if $this->coeff_zero == $divisor;
+    return $this->new( map { $_ / $divisor } $this->coeff );
+}
+
+sub monize {
+    my ($this) = @_;
+    return $this if $this->is_zero;
+    return $this->div_const($this->coeff($this->degree));
+}
+
+sub pow {
+    my ($this, $exp) = @_;
+    _check_int($exp);
+    my $degree = $this->degree;
+    return $this->new($this->coeff_one)        if 0 == $exp;
+    return $this                                if 0  > $degree;
+    return $this->new($this->coeff(0) ** $exp) if 0 == $degree;
+    croak 'exponent too large' if $degree * $exp > $max_degree;
+    my $result = undef;
+    while ($exp) {
+        if (1 & $exp) {
+            $result = defined($result)? $this->mul($result): $this;
+        }
+        $exp >>= 1 and $this = $this->mul($this);
+    }
+    return $result;
+}
+
+sub pow_mod {
+    my ($this, $exp, $that) = @_;
+    _check_int($exp);
+    $this = $this->mod($that);
+    my $this_d = $this->degree;
+    return $this->new                          if 0 == $that->degree;
+    return $this->new($this->coeff_one)        if 0 == $exp;
+    return $this                               if 0  > $this_d;
+    return $this->new($this->coeff(0) ** $exp) if 0 == $this_d;
+    my $result = undef;
+    while ($exp) {
+        if (1 & $exp) {
+            $result =
+		defined($result)? $this->mul($result)->mod($that): $this;
+        }
+        $exp >>= 1 and $this = $this->mul($this)->mod($that);
+    }
+    return $result;
+}
+
+sub shift_up {
+    my ($this, $exp) = @_;
+    _check_int($exp);
+    croak 'exponent too large' if $this->degree + $exp > $max_degree;
+    return $this if !$exp;
+    return $this->new(($this->coeff_zero) x $exp, $this->coeff);
+}
+
+sub shift_down {
+    my ($this, $exp) = @_;
+    _check_int($exp);
+    return $this if !$exp;
+    return $this->new( map { $this->coeff($_) } $exp .. $this->degree );
+}
+
+sub slice {
+    my ($this, $start, $count) = @_;
+    _check_int($start, $count);
+    my $this_d = $this->degree;
+    my $end = $start+$count-1;
+    if ($this_d <= $end) {
+	return $this if 0 == $start;
+	$end = $this_d;
+    }
+    return $this->new( map { $this->coeff($_) } $start .. $end );
+}
+
+sub differentiate {
+    my ($this) = @_;
+    return $this->new( map { $this->coeff($_) * $_ } 1..$this->degree );
+}
+
+sub integrate {
+    my ($this, $const) = @_;
+    if (!defined $const) {
+        $const = $this->coeff_zero;
+    }
+    return $this->new(
+        $const, map { $this->coeff($_) / ($_+1) } 0..$this->degree
+    );
+}
+
+sub definite_integral {
+    my ($this, $lower, $upper) = @_;
+    my $ad = $this->integrate;
+    return $ad->evaluate($upper) - $ad->evaluate($lower);
+}
+
+sub as_string {
+    my ($this, $params) = @_;
+    my %config = (
+        @string_defaults,
+        %{$params || $this->string_config || (ref $this)->string_config},
+    );
+    my $max_exp = $this->degree;
+    if ($max_exp < 0) {
+        $max_exp = 0;
+    }
+    my $result = q{};
+    my $one = $this->coeff_one;
+    foreach my $exp ($config{'ascending'}? 0..$max_exp: reverse 0..$max_exp) {
+        my $coeff = $this->coeff($exp);
+        my $with_variable = $config{'with_variable'};
+
+        # skip term?
+        if (
+            $with_variable &&
+            $exp < $max_exp &&
+            $config{'fold_zero'} &&
+            $coeff == $this->coeff_zero
+        ) {
+            next;
+        }
+
+        # plus/minus
+        if ($config{'fold_sign'} && $coeff < $this->coeff_zero) {
+            $coeff = -$coeff;
+            $result .= $config{q[] eq $result? 'leading_minus': 'minus'};
+        }
+        else{
+            $result .= $config{q[] eq $result? 'leading_plus': 'plus'};
+        }
+
+        # coefficient
+        if (
+            !$with_variable ||
+            !$config{'fold_one'} ||
+            0 == $exp && $config{'fold_exp_zero'} ||
+            $one != $coeff
+        ) {
+            $result .= $config{'convert_coeff'}->($coeff);
+            next if !$with_variable;
+            if (0 != $exp || !$config{'fold_exp_zero'}) {
+                $result .= $config{'times'};
+            }
+        }
+
+        # variable and exponent
+        if (0 != $exp || !$config{'fold_exp_zero'}) {
+            $result .= $config{'variable'};
+            if (1 != $exp || !$config{'fold_exp_one'}) {
+                $result .= $config{'power'} . $exp;
+            }
+        }
+    }
+    return join q{}, $config{'prefix'}, $result, $config{'suffix'};
+}
+
+sub gcd {
+    my ($this, $that, $mod) = @_;
+    defined($mod) or $mod = 'mod';
+    my $mod_op = $this->can($mod);
+    $mod_op or croak "no such method: $mod";
+    my ($this_d, $that_d) = ($this->degree, $that->degree);
+    if ($this_d < $that_d) {
+        ($this, $that) = ($that, $this);
+	($this_d, $that_d) = ($that_d, $this_d);
+    }
+    while (0 <= $that_d) {
+        ($this, $that) = ($that, $this->$mod_op($that));
+	($this_d, $that_d) = ($that_d, $that->degree);
+	$this_d > $that_d or croak 'bad modulus operator';
+    }
+    return $this;
+}
+
+sub xgcd {
+    croak 'array context required' if !wantarray;
+    my ($this, $that) = @_;
+    my ($d1, $d2) = ($this->new($this->coeff_one), $this->new);
+    if ($this->degree < $that->degree) {
+        ($this, $that) = ($that, $this);
+        ($d1, $d2) = ($d2, $d1);
+    }
+    my ($m1, $m2) = ($d2, $d1);
+    while (!$that->is_zero) {
+        my ($div, $mod) = $this->divmod($that);
+        ($this, $that) = ($that, $mod);
+        ($d1, $d2, $m1, $m2) =
+            ($m1, $m2, $d1->sub_($m1->mul($div)), $d2->sub_($m2->mul($div)));
+    }
+    return ($this, $d1, $d2, $m1, $m2);
+}
+
+1;
+__END__
 
 =head1 NAME
 
-Math::Polynomial - Perl class for working with polynomials.
+Math::Polynomial - Perl class representing polynomials in one variable
 
 =head1 VERSION
 
-This document describes Math::Polynomial version 0.04.
+This documentation refers to version 1.000 of Math::Polynomial.
 
 =head1 SYNOPSIS
 
-    use Math::Polynomial;
+  use Math::Polynomial 1.000;
 
-     # The polynomial 2x^2 + 3x - 2
-    my $P = Math::Polynomial->new(2,3,-2);
+  # simple constructors:
+  $p  = Math::Polynomial->new(0, -3, 0, 2);    # (2*x**3 - 3*x)
+  $zp = Math::Polynomial->new();               # the zero polynomial
+  $zp = Math::Polynomial->new(0);              # the zero polynomial
+  $q  = Math::Polynomial->monomial(3);         # (x**3)
+  $r  = Math::Polynomial->monomial(3, 2);      # (2*x**3)
 
-    # Evaluate the polynomial for x = 10
-    my $result = $P->eval(10);
+  # Lagrange interpolation:
+  $s = Math::Polynomial->interpolate([0..3], [0, -1, 10, 45]);
 
-    # The polynomial 3x + 4
-    my $Q = Math::Polynomial->new(3,4);
+  # constructors as object methods:
+  $t = $p->new(0, -3, 0, 2);                   # (2*x**3 - 3*x)
+  $u = $p->monomial(3, 2);                     # (2*x**3)
+  $v = $p->interpolate([0..3], [0, -1, 10, 45]); # (2*x**3 - 3*x)
 
-    print "$P / $Q = ", $P / $Q, "\n";
+  # properties
+  $coeff = $p->coeff(0);                       #     0
+  $coeff = $p->coeff(1);                       #        -3
+  $coeff = $p->coeff(2);                       #            0
+  $coeff = $p->coeff(3);                       #               2
+  $coeff = $p->coeff(4);                       # 0
+  $const = $p->coeff_zero;                     # 0
+  $const = $p->coeff_one;                      # 1
+  @coeff = $p->coeff;                          #    (0, -3, 0, 2)
+  @coeff = $zp->coeff;                         #    ()
+  @coeff = $p->coefficients;                   #    (0, -3, 0, 2)
+  @coeff = $zp->coefficients;                  #    (0)
+  $n = $p->degree;                             # 3
+  $n = $zp->degree;                            # -1
+  $n = $p->proper_degree;                      # 3
+  $n = $zp->proper_degree;                     # undef
 
-    my $polynomial = Math::Polynomial::interpolate(1 => 5, 2 => 12, 3 => 6);
+  # evaluation
+  $y = $p->evaluate(4);                        # 116
+
+  # comparison
+  $bool = !$p;         $bool = $p->is_zero;    # p(x) == 0 everywhere
+  $bool = $p == $q;    $bool = $p->is_equal($q);      # equality
+  $bool = $p != $q;    $bool = $p->is_unequal($q);    # inequality
+
+  # arithmetic
+  $q = -$p;            $q = $p->neg;           # q(x) == -p(x)
+  $q = $p1 + $p2;      $q = $p1->add($p2);     # q(x) == p1(x) + p2(x)
+  $q = $p1 - $p2;      $q = $p1->sub_($p2);    # q(x) == p1(x) - p2(x)
+  $q = $p1 * $p2;      $q = $p1->mul($p2);     # q(x) == p1(x) * p2(x)
+  $q = $p1 / $p2;      $q = $p1->div($p2);     # p1 == q * p2 + r,
+                                               #   deg r < deg p2
+  $r = $p1 % $p2;      $r = $p1->mod($p2);     # p1 == q * p2 + r,
+                                               #   deg r < deg p2
+  $q = $p + 3;         $q = $p->add_const(3);  # q(x) == p(x) + 3
+  $q = $p - 3;         $q = $p->sub_const(3);  # q(x) == p(x) - 3
+  $q = $p * 3;         $q = $p->mul_const(3);  # q(x) == p(x) * 3
+  $q = $p / 3;         $q = $p->div_const(3);  # q(x) == p(x) / 3
+
+  $q = $p ** 3;        $q = $p->pow(3);        # q(x) == p(x) ** 3
+  $q = $p << 3;        $q = $p->shift_up(3);   # q(x) == p(x) * x**3
+  $q = $p >> 3;        $q = $p->shift_down(3); # p == q * x**3 + r,
+                                               #   deg r < 3
+
+  $r = $p->slice(0, 3);              # p ==  q * x**3 + r, deg r < 3
+  $r = $p->slice(2, 3);              # p == (q * x**3 + r) * x**2 + s,
+                                     #   deg r < 3, deg s < 2
+
+  ($q, $r) = $p1->divmod($p2);                 # p1 == q * p2 + r,
+                                               #   deg r < deg p2
+  $r = $p1->pow_mod(3, $p2);                   # p1**3 == q * p2 + r,
+                                               #   deg r < deg p2
+  $r = $p1->mmod($p2);                         # c * p1 == q * p2 + r,
+                                               #   deg r < deg p2,
+					       #   c is some constant
+
+  $q = $p1->nest($p2);                         # q(x) == p1(p2(x))
+  $q = $p->monize;                             # p(x) == q(x) * c,
+                                               #   q is monic
+
+  # greatest common divisor
+  $d = $p1->gcd($p2);                          # p1 == q1 * d,
+                                               # p2 == q2 * d,
+                                               # deg d is maximal
+
+  $d = $p1->gcd($p2, 'mmod');                  # like gcd, but with
+  					       # alternate modulus op
+
+  # extended Euclidean algorithm
+  ($d, $d1, $d2, $m1, $m2) = $p1->xgcd($p2);   # p1 == q1 * d,
+                                               # p2 == q2 * d,
+                                               # deg d is maximal,
+                                               # d == p1*d1 + p2*d2,
+                                               # 0 == p1*m1 + p2*m2
+
+  # calculus
+  $q = $p->differentiate;             # q(x) == d/dx p(x)
+  $q = $p->integrate;                 # d/dx q(x) == p(x), q(0) == 0
+  $q = $p->integrate(10);             # d/dx q(x) == p(x), q(0) == 10
+  $a = $p->definite_integral(1, 2);   # Integral from 1 to 2, p(x) dx
+
+  # configurable string representation
+  $config = {
+    ascending     => 0,
+    with_variable => 1,
+    fold_sign     => 0,
+    fold_zero     => 1,
+    fold_one      => 1,
+    fold_exp_zero => 1,
+    fold_exp_one  => 1,
+    convert_coeff => sub { "$_[0]" },
+    plus          => q{ + },
+    minus         => q{ - },
+    leading_plus  => q{},
+    leading_minus => q{- },
+    times         => q{ },
+    power         => q{^},
+    variable      => q{x},
+    prefix        => q{(},
+    suffix        => q{)},
+  };
+  $str = "$p";                                 # '(2 x^3 + -3 x)'
+  $str = $p->as_string();                      # '(2 x^3 + -3 x)'
+  $str = $p->as_string($config);               # '(2 x^3 + -3 x)'
+
+  $str = $p->as_string({fold_sign => 1});      # '(2 x^3 - 3 x)'
+
+  $p->string_config({fold_sign => 1});
+  $str = "$p";                                 # '(2 x^3 - 3 x)'
+  $str = $p->as_string;                        # '(2 x^3 - 3 x)'
+
+  $p->string_config(undef);
+  $str = "$p";                                 # '(2 x^3 + -3 x)'
+
+  Math::Polynomial->string_config({fold_sign => 1});
+  $str = "$p";                                 # '(2 x^3 - 3 x)'
+
+  $config = $p->string_config;                 # undef
+  $config = Math::Polynomial->string_config;   # {fold_sign => 1}
+
+  $config = {
+    with_variable => 0,
+    ascending     => 1,
+    plus          => q{, },
+  };
+  $str = $p->as_string($config);               # '(0, -3, 0, 2)'
+
+  # examples of other coefficient spaces
+  $c0 = Math::Complex->make(0, 3);
+  $c1 = Math::Complex->make(2, 1);
+  $p = Math::Polynomial->new($c0, $c1);        # p(x) == (2+i)*x + 3i
+
+  $c0 = Math::BigRat->new('-1/2');
+  $c1 = Math::BigRat->new('0');
+  $c2 = Math::BigRat->new('3/2');
+  $p = Math::Polynomial->new($c0, $c1, $c2);  # p(x) == 3/2*x**2 - 1/2
 
 =head1 DESCRIPTION
 
-This module implements single variable polynomials using arrays. It also
-implements some useful functionality when working with polynomials, such
-as adding, multiplication, etc.
+Math::Polynomial objects represent polynomials in one variable,
+i.e. expressions built with finitely many additions, subtractions
+and multiplications of the variable and some constants.  A standard
+way of writing down a polynomial in one variable is as a sum of
+products of some constant and a power of x, ordered by powers of
+x.  The constants in those terms are called coefficients.
 
-=head1 CONSTRUCTOR
+The polynomial I<p(x) = 0> is called the zero polynomial.  For
+polynomials other than the zero polynomial, the exponent of the
+highest power of x with a nonzero coefficient is called the degree
+of the polynomial.
 
-The following constructors exist to create new polynomials.
+Math::Polynomial objects are immutable.  New objects can be created
+using a variety of constructors or as expressions composed from
+existing objects.
+
+The module works with various types of coefficients, like ordinary
+floating point numbers, complex numbers, arbitrary precision
+rationals, matrices, elements of finite fields, and lots of others.
+All that is required is that the coefficients are either Perl numbers
+or objects with suitably overloaded arithmetic operators.  Operations
+on polynomials are carried out by reducing them to basic operations
+in the domain of their coefficients.
+
+Math::Polynomial objects are implicitly bound to their coefficient
+space, which will be inherited when new polynomials are derived
+from existing ones, or determined from actual coefficients when
+polynomials are created from scratch.  It is the responsibility of
+the user not to mix coefficients that cannot be added to or multiplied
+by each other.
+
+Note that ordinary Perl numbers are of only limited use as coefficients,
+since floating point arithmetic, unlike arithmetic in algebraic
+fields, suffers from rounding errors.
+
+=head1 CLASS VARIABLES
 
 =over 4
 
-=item new(I<coefficient>, ...)
+=item I<$VERSION>
 
-A new polynomial is constructed. The coefficient for the highest degree
-term is first in the list, while the constant (the coefficient for
-X**0) is the last one in the list.
+C<$VERSION> contains the current version number of the module.  Its
+most typical use is the statement:
 
-=cut
+  use Math::Polynomial 1.000;
 
-sub new {
-    my $class = shift;
-    my $self = [@_];
-    return bless $self, $class;
-}
+This will make sure the module version used is at least 1.000, which
+is recommended because previous versions had a different API.
+
+=item I<$max_degree>
+
+C<$max_degree> limits the arguments for the I<pow> and I<shift_up>
+operators and the monomial constructors, see L</pow>.  Its default
+value is one million.
 
 =back
 
 =head1 CLASS METHODS
 
-Here is a list of class methods available. The methods can be applied
-to individual polynomials or C<Math::Polynomial>. If it is applied to an
-object it will affect the entire class.
+=head2 Constructors
 
 =over 4
 
-=item configure(I<variable> => I<value>, ...)
+=item I<new($coeff0, $coeff1, $coeff2, ...)>
 
-Configure various things regarding the class. Following is a list of
-variables used by the class.
+C<Math::Polynomial-E<gt>new(@coeff)> creates a new polynomial with
+the given coefficients for x to the power of zero, one, two, etc.
+For example, I<new(7, 1)> creates an object representing p(x) =
+7+x.
 
-=over 4
+Note that coefficients are specified in ascending order of powers
+of x.  The degree of the polynomial will be at most I<n-1> if I<n>
+coefficients are given, less if one or more of the highest-order
+coefficients are zero.
 
-=item PLUS
+Specifying at least one coefficient (which may be zero) ensures
+that the created polynomials use the desired coefficient space.
+Without any parameters, I<new> creates a zero polynomial on Perl
+numeric values.
 
-The string inserted as a plus sign between terms.
-Default is C<' + '>.
+=item I<monomial($degree)>
 
-=item MINUS
+=item I<monomial($degree, $coeff)>
 
-The string inserted as a minus sign between terms. If the first
-coefficient is negative, this string without spaces is used as prefix.
-Default is C<' - '>.
+C<Math::Polynomial-E<gt>monomial($degree, $coeff)> creates a
+polynomial with $coeff as the coefficient for x to the power of
+$degree, and all other coefficients zero.  The degree must be a
+non-negative integer number.  If $coeff is omitted, it defaults to
+the Perl scalar B<1>.
 
-=item TIMES
+To prevent accidential excessive memory consumption, C<$degree>
+must be at most C<$Math::Polynomial::max_degree>.
 
-The string inserted as multiplication between the coefficients and the
-variables. Default is C<'*'>.
+=item I<interpolate([$x1, $x2, ...], [$y1, $y2, ...])>
 
-=item POWER
+C<Math::Polynomial-E<gt>interpolate(\@x_values, \@y_values)> creates
+a Lagrange interpolation polynomial passing through support points
+with the given x- and y-coordinates.  The x-values must be mutually
+distinct.  The number of y-values must be equal to the number of
+x-values.  For I<n> support points this takes I<O(n**3)> multiplications,
+I<O(n**3)> additions, I<O(n)> divisions and I<O(n**2)> comparisons
+in the coefficient space.  The result will be a polynomial of degree
+I<n-1>.
 
-The string inserted as power between the variable and the
-power. Default is C<'**'>.
-
-=item VARIABLE
-
-The string used as variable in the polynom. Default is C<'$X'>.
-
-=back
-
-=cut
-
-my %CONFIG = (PLUS => ' + ',
-	      MINUS => ' - ',
-	      TIMES => '*',
-	      POWER => '**',
-	      VARIABLE => '$X');
-
-sub configure {
-    my $class = shift;
-    my ($key, $value);
-
-    while (defined ($key = shift) && defined ($value = shift)) {
-	$CONFIG{$key} = $value;
-    }
-}
-
-=item verbose(I<bool>)
-
-If verbose is turned on, string conversion will return a string for
-the polynomial, otherwise a list of coefficients will be returned.
-
-=cut
-
-my $VERBOSE = 0;
-
-sub verbose {
-    my $class = shift;
-    $VERBOSE = shift;
-}
+Note that with increasing numbers of support points, Lagrange
+interpolation tends to get numerically unstable, meaning drastically
+inaccurate if carried out with limited precision.  Furthermore,
+high-degree interpolation polynomials can oscillate wildly in the
+neighbourhood of the support points, let alone elswhere.  This is
+not a fault of the module but fundamental to the nature of these
+functions.
 
 =back
 
 =head1 OBJECT METHODS
 
-Here is a list of object methods available. Object methods are applied
-to the object in question, in contrast with class methods which are
-applied to a class.
+=head2 Constructors
+
+Each class-level constructor can be used as an object method, too,
+i.e. be invoked from an object rather than a class name.  This way,
+coefficient space properties are passed on from the invocant object
+to the new object, saving some initial coefficient analysis.  Other
+properties like per-object stringification settings (explained
+below) are inherited likewise.
 
 =over 4
 
-=item clone()
+=item I<new($coeff0, $coeff1, $coeff2, ...)>
 
-This method will clone the polynomial and return a copy of it.
+If C<$p> refers to a Math::Polynomial object, the object method
+C<$p-E<gt>new(@coeff)> creates and returns a new polynomial sharing
+the coefficient space with C<$p>, but with its own list of coefficients
+as specified in C<@coeff>.
 
-=cut
+=item I<monomial($degree)>
 
-sub clone {
-    my $self = shift;
-    return Math::Polynomial->new(@$self);
-}
+=item I<monomial($degree, $coeff)>
 
-=item coeff(I<degree>)
+C<$p-E<gt>monomial($degree, $coeff)> creates a monomial like
+C<Math::Polynomial-E<gt>monomial($degree, $coeff)>, but sharing
+inheritable properties with C<$p>.  If C<$coeff> is omitted it
+defaults to the multiplicative unit element of the coefficient space
+of C<$p>.
 
-This method returns the coefficient for x to the power of I<degree>.
+To prevent accidential excessive memory consumption, C<$degree>
+must be at most C<$Math::Polynomial::max_degree>.
 
-=cut
+=item I<interpolate([$x1, $x2, ...], [$y1, $y2, ...])>
 
-sub coeff {
-    my $self = shift;
-    my $no = shift;
-    croak "coeff: exponent out of range "
-	unless $no < @$self && $no >= 0;
-    return +$self->[@$self - $no - 1];
-}
-
-=item degree()
-
-This method returns the degree of the polynomial. The degree of a
-polynomial is the maximum of the degree of terms with non-zero
-coefficients.  For zero polynomials, B<-1> is returned.
-
-=cut
-
-sub degree {
-    my $self = shift;
-    my $degree = @$self;
-    $degree-- while $degree > 0 && $self->[@$self - $degree] == 0;
-    return $degree-1;
-}
-
-=item eval(I<value>)
-
-The polynomial is evaluated for I<value>. The evaluation is done using
-B<Horners rule>, hence evaluation is done in I<O(n)> time, where I<n>
-is the degree of the polynomial.
-
-=cut
-
-sub eval {
-    my $self = shift;
-    my $arg = shift;
-    my $result = 0;
-    foreach (@$self) {
-	$result = $arg * $result + $_;
-    }
-    return $result;
-}
-
-=item size()
-
-This method returns the internal size of the polynomial, i.e. the
-length of the array where the coefficients are stored. After a
-C<tidy()>, I<degree> is equal to I<size>-1.
-
-=cut
-
-sub size {
-    my $self = shift;
-    return scalar @$self;
-}
-
-=item tidy()
-
-This method removes all terms which are redundant, i.e. the
-zero coefficients where all higher degree coefficients are also zero.
-
-This method is B<never> called automatically, since it is assumed that
-the programmer knows best when to tidy the polynomial.
+C<$p-E<gt>interpolate(\@x_values, \@y_values)> is the object method
+variant of the Lagrange interpolation polynomial constructor.  It
+creates a polynomial passing through support points with the given
+x- and y-coordinates.  The x-values must be mutually distinct.  The
+number of y-values must be equal to the number of x-values.  All
+values must belong to the coefficient space of C<$p>.
 
 =back
 
-=cut
-
-sub tidy {
-    my $self = shift;
-    while (@{$self} && 0 == $self->[0]) {
-	shift @{$self};
-    }
-}
-
-=head1 OPERATORS
-
-There is a set of operators defined for polynomials.
+=head2 Property Accessors
 
 =over 4
 
-=item I<polynomial> + I<polynomial>
+=item I<coefficients>
 
-Adds two polynomials together, returning the sum. The operation is
-I<O(n)>, where I<n> is the maximum of the degrees of the polynomials.
+C<$p-E<gt>coefficients> returns the coefficients of C<$p> in ascending
+order of exponents, including zeroes, up to the highest-order
+non-zero coefficient.  The result will be a list of I<n+1> coefficients
+for polynomials of degree I<n>, or a single zero coefficient for
+zero polynomials.
 
-=cut
+=item I<coeff>
 
-sub plus {
-    my $left = shift;
-    my $right = shift;
-    my $new = Math::Polynomial->new();
+C<$p-E<gt>coeff> returns the coefficients of C<$p> much like
+C<$p-E<gt>coefficients>, but for zero polynomials the result will
+be an empty list.
 
-    # If adding a constant, turn it into a polynomial
-    $right = ref($right) ? $right : Math::Polynomial->new($right);
+(Mnemonic for I<coeff> versus I<coefficients>: Shorter name, shorter
+list.)
 
-    my $i = @$left;
-    my $j = @$right;
+=item I<coeff($degree)>
 
-    while ($i > 0 || $j > 0) {
-	unshift(@$new, 0);
-	$new->[0] += $left->[$i] if $i-- > 0;
-	$new->[0] += $right->[$j] if $j-- > 0;
-    }
-    return $new;
-}
+C<$p-E<gt>coeff($exp)> returns the coefficient of degree C<$exp>
+of C<$p>.  If C<$exp> is less than zero or larger than the degree
+of C<$p>, the zero element of the coefficient space is returned.
 
-=item I<polynomial> - I<polynomial>
+=item I<coeff_zero>
 
-Substracts the right polynomial from the left polynomial, returning
-the difference. The operation is I<O(n)>, where I<n> is the maximum of
-the degrees of the polynomials.
+C<$p-E<gt>coeff_zero> returns the zero element of the coefficient
+space of C<$p>, i.e. the neutral element with respect to addition.
 
-=cut
+=item I<coeff_one>
 
-sub minus {
-    my $left = shift;
-    my $right = shift;
+C<$p-E<gt>coeff_one> returns the multiplicative unit element of the
+coefficient space of C<$p>, i.e. the neutral element with respect
+to multiplication.
 
-    # If substracting a constant, turn it into a polynomial
-    $right = ref($right) ? $right : Math::Polynomial->new($right);
+=item I<degree>
 
-    # Swap terms if called in reverse order.
-    ($right,$left) = ($left,$right) if $_[0];
+C<$p-E<gt>degree> returns B<-1> if C<$p> is a zero polynomial,
+otherwise the degree of C<$p>.
 
-    my $i = @$left;
-    my $j = @$right;
-    my $new = Math::Polynomial->new();
+=item I<proper_degree>
 
-    while ($i > 0 || $j > 0) {
-	unshift(@$new, 0);
-	$new->[0] += $left->[$i] if $i-- > 0;
-	$new->[0] -= $right->[$j] if $j-- > 0;
-    }
-    return $new;
-}
-
-=item - I<polynomial>
-
-Negates a polynomial. The operation is I<O(n)> where I<n> is the degree
-of the polynomial.
-
-=cut
-
-sub neg {
-    my $polynomial = shift;
-
-    return Math::Polynomial->new(map { -$_ } @$polynomial);
-}
-
-=item I<polynomial> * I<polynomial>
-
-Multiplies two polynomials together, returning the product. The
-operation is I<O(n*m)>, where I<n> and I<m> are the degrees of the
-polynomials respectively.
-
-=cut
-
-sub times {
-    my $left = shift;
-    my $right = shift;
-    my $new = Math::Polynomial->new();
-
-    # If multiplied by a constant, turn it into a polynomial
-    $right = ref($right) ? $right : Math::Polynomial->new($right);
-
-    for (my $i = 0 ; $i < @$right ; $i++) {
-	for (my $j = 0 ; $j < @$left ; $j++) {
-	    $new->[$i + $j] += $right->[$i] * $left->[$j];
-	}
-    }
-
-    return $new;
-}
-
-=item I<polynomial> / I<polynomial>
-
-Divides the polynomial on the left (called the numerator) with the
-polynomial on the right (called the denominator) and returns the
-quotient. If the degree of the denominator is greater than the degree
-of the numerator, the zero polynomial will be returned.
-
-The denominator must not be the zero polynomial.
-
-=item I<polynomial> % I<polynomial>
-
-Divides the polynomial on the left (called the numerator) with the
-polynomial on the right (called the denominator) and returns the
-remainder of the division. If the degree of the denominator is greater
-than the degree of numerator, the numerator will be returned.
-
-The denominator must not be the zero polynomial.
-
-=item String conversion.
-
-If verbose is turned on, the polynomial will be converted to a string
-where '$X' is used as the variable. If a coefficient is zero, that
-term will not be printed.
-
-To change the string used as variable, use the C<configure> class
-method described above.
-
-If verbose is turned off, a parenthesised, $"-separated list will be
-returned.
+C<$p-E<gt>proper_degree> returns B<undef> if C<$p> is a zero polynomial,
+otherwise the degree of C<$p>.  This can be useful for catching incorrect
+numerical uses of degrees where zero polynomials might be involved.
 
 =back
 
-=cut
-
-sub to_string {
-    my $self = shift;
-
-    if ($VERBOSE) {
-	my @terms;
-	my $exp = @$self - 1;
-	foreach (@$self) {
-	    # If the coefficient is not zero...
-	    if ($_ != 0) {
-		# ... we're going to build a term.
-		my $term = '';
-		# First, we add a plus or a minus, depending on the
-		# sign of the coefficient, then we add the absolute
-		# value of the coefficient.
-		if ($_ < 0) {
-		    push(@terms, $CONFIG{MINUS});
-		    $term = -$_ unless $_ == -1 && $exp != 0;
-		} else {
-		    push(@terms, $CONFIG{PLUS});
-		    $term = $_ unless $_ == 1 && $exp != 0;
-		}
-
-		# If the exponent is not zero, we append the
-		# equivalent of '*x^e' to the result.
-		if ($exp != 0) {
-		    $term .= $CONFIG{TIMES} if $_ != 1;
-		    $term .= $CONFIG{VARIABLE};
-		    $term .= $CONFIG{POWER}.$exp if $exp > 1;
-		}
-		push(@terms,$term);
-	    }
-	    $exp--;
-	}
-
-	if (@terms && $terms[0] eq $CONFIG{PLUS}) {
-	    # If there's a plus first, drop it.
-	    shift(@terms);
-	} elsif (@terms) {
-	    # Otherwise, remove any spaces around the first minus.
-	    $terms[0] =~ tr/ //d;
-	}
-	return join('', @terms);
-    } else {
-	return $self->dump();
-    }
-}
-
-=head1 SUBROUTINES
+=head2 Evaluation
 
 =over 4
 
-=item quotrem(I<numerator>,I<denominator>)
+=item I<evaluate>
 
-This method computes the quotient and the remainder when dividing
-I<numerator> by I<denominator> and returns a list
-(I<quotient>,I<remainder>). It is used by the operators C</> and C<%>.
-
-It uses the standard long division algorithm for polynomials, with a
-complexity of I<O(n*m)> where I<n> and I<m> are the degrees of the
-polynomials.
-
-=cut
-
-sub quotrem {
-    my $left = shift;
-    my $right = shift;
-
-    # If divided by a constant, turn the constant into a polynomial.
-    $right = ref($right) ? $right : Math::Polynomial->new($right);
-
-    # Swap terms if called in reverse order.
-    ($right,$left) = ($left,$right) if $_[0];
-
-    if (@{$right} && 0 == $right->[0]) {
-	$right = $right->clone;
-	$right->tidy;
-    }
-    if (!@{$right}) {
-	croak "division by zero polynomial";
-    }
-    if (@{$left} && 0 == $left->[0]) {
-	$left = $left->clone;
-	$left->tidy;
-    }
-
-    if (@$left >= @$right) {
-	my @C = @$left;
-	my @R = splice(@C,0,@$right-1);
-	my @Q;
-
-	foreach my $C (@C) {
-	    push(@R, $C);
-	    my $quote = shift(@R) / $right->[0];
-	    my $i = 1;
-	    foreach (@R) {
-		$_ -= $quote * $right->[$i++];
-	    }
-	    push(@Q, $quote);
-	}
-	return (
-	      Math::Polynomial->new(@Q),
-	      Math::Polynomial->new(@R));
-    } else {
-	return (
-	      Math::Polynomial->new(),
-	      Math::Polynomial->new(@$left));
-    }
-}
-
-=item interpolate(I<x> => I<y>, ...)
-
-Given a set of pairs of I<x> and I<y> values, C<interpolate> will
-return a polynomial which interpolates those values. The data points
-are supplied as a list of alternating I<x> and I<y> values.
-
-The degree of the resulting polynomial will be one less than the
-number of pairs, e.g. the polynomial in the synopsis will be of
-degree 2.
-
-The interpolation is done using B<Lagrange's formula> and the
-implementation runs in I<O(n^2)>, where I<n> is the number of pairs
-supplied to C<interpolate>.
-
-Please note that it is a I<bad idea> to use interpolation for
-extrapolation, i.e. if you are interpolating a polynomial for
-I<x>-values in the range 0 to 10, then you may get terrible results if
-you try to predict I<y>-values outside this range. This is true
-especially if the true function is not a polynomial.
-
-=cut
-
-# Matching extra ' above.
-
-sub interpolate {
-    my(@x,@y);
-    my($x,$y);
-
-    while (defined ($x = shift) && defined ($y = shift)) {
-	unshift(@x,$x);
-	unshift(@y,$y);
-    }
-
-    # Declare and compute the numerator
-    my $numerator = Math::Polynomial->new(1);
-    foreach (@x) { $numerator->mul1c($_) }
-
-    # Declare and compute the polynomial using Lagrange's formula (see
-    # separate paper.
-    my $result = Math::Polynomial->new(0);
-    foreach (@x) {
-	my $temp = $numerator->clone();
-	$temp->div1c($_);
-	my $constant = shift(@y) / $temp->eval($_);
-	$result += $constant * $temp;
-    }
-    return $result;
-}
+C<$p-E<gt>evaluate($x)> computes the value of the polynomial function
+given by C<$p> at the position C<$x>.  For polynomials of degree
+I<n>, this takes I<n> multiplications and I<n> additions in the
+coefficient space.
 
 =back
 
-=head1 INTERNAL METHODS
+=head2 Comparison Operators
 
-The methods in this section are internal and should not acually be
-used for anything but internal stuff. They are documented here anyway,
-but beware that these methods may change or dissapear without notice!
+All comparison operators return boolean results.
 
 =over 4
 
-=item dump()
+=item C<!>
 
-Returns a compact, but human readable, string representing the object.
+=item I<is_zero>
 
-=cut
+C<$p-E<gt>is_zero> or short C<!$p> checks whether C<$p> is a zero polynomial.
 
-sub dump {
-    my $self = shift;
-    return "(" . join($",@$self). ")";
-}
+=item C<==>
 
-=item mul1c(I<c>)
+=item I<is_equal>
 
-Multiply the polynomial by I<(x - c)>. Used internally by the
-interpolate() function.
+C<$p-E<gt>is_equal($q)> or short C<$p == $q> checks whether C<$p>
+is equivalent to C<$q>.  The result is true if both polynomials
+have the same degree and all pairs of coefficients of same degree
+are equal.  For polynomials of equal degree I<n>, this takes at
+most I<n+1> equality checks in the coefficient space.
 
-=cut
+=item C<!=>
 
-sub mul1c {
-    my $self = shift;
-    my $const = - shift;
-    my $prev = 0;
-    my $tmp;
-    push(@$self,0);
-    foreach (@$self) {
-	$tmp = $_;
-	$_ += $const * $prev;
-	$prev = $tmp;
-    }
-}
+=item I<is_unequal>
 
-=item div1c(I<c>)
-
-Divide the polynomial by I<(x - c)>. Used internally by the
-interpolate() function.
+C<$p-E<gt>is_unequal($q)> or short C<$p != $q> checks whether C<$p>
+is not equivalent to C<$q>.  The result is true if the polynomials
+have different degree or at least one pair of coefficients of same
+degree is different.  For polynomials of equal degree I<n>, this
+takes at most I<n+1> equality checks in the coefficient space.
 
 =back
 
-=cut
+Note that there are no ordering comparisons (E<lt>, E<lt>=, E<gt>,
+E<lt>=E<gt>, ...) as neither polynomial nor coefficient spaces in
+general need to be ordered spaces.
 
-sub div1c {
-    my $self = shift;
-    my $const = - shift;
-    my $prev = 0;
-    foreach (@$self) {
-	$_ -= $prev * $const;
-	$prev = $_;
-    }
-    pop(@$self);
-}
-
-=head1 EXPORTS
-
-Math::Polynomial exports nothing by default.
-Subroutines that can be exported on demand are:
+=head2 Arithmetic Operators
 
 =over 4
 
-=item quotrem
+=item unary C<->
 
-=item interpolate
+=item I<neg>
+
+C<$p-E<gt>neg> or short C<-$p> calculates the negative of a polynomial.
+For a polynomial of degree I<n>, this takes I<n+1> negations in the
+coefficient space.
+
+=item C<+>
+
+=item I<add>
+
+C<$p-E<gt>add($q)> or short C<$p + $q> calculates the sum of two polynomials.
+For polynomials of degree I<m> and I<n>, this takes I<1+min(m, n)> additions
+in the coefficient space.
+
+=item C<->
+
+=item I<sub_>
+
+C<$p-E<gt>sub_($q)> or short C<$p - $q> calculates the difference
+of two polynomials.  For polynomials of degree I<m> and I<n>, this
+takes I<1+min(m, n)> subtractions in the coefficient space, plus
+I<n-m> negations if I<n> is greater than I<m>.
+
+The trailing underscore in the method name may look a bit odd but
+will prevent primitive syntax-aware tools from stumbling over
+"misplaced" I<sub> keywords.
+
+=item C<*>
+
+=item I<mul>
+
+C<$p-E<gt>mul($q)> or short C<$p * $q> calculates the product of two
+polynomials.  For polynomials of degree I<m> and I<n>, this takes
+I<(m+1)*(n+1)> multiplications and I<m*n> additions in the coefficient
+space.
+
+=item I<divmod>
+
+C<($q, $r) = $p1-E<gt>divmod($p2)> divides a polynomial by another
+polynomial and returns the polynomial part of the quotient, and the
+remainder.  The second polynomial must not be a zero polynomial.
+The remainder is a polynomial of lesser degree than the second
+polynomial and satisfies the equation I<$p1 == $p2*$q + $r>.  For
+polynomials of degree I<m> and I<n>, I<mE<gt>=n>, this takes I<m+1-n>
+divisions, I<(m+1-n)*n> multiplications and I<(m+1-n)*n> subtractions
+in the coefficient space.
+
+=item C</>
+
+=item I<div>
+
+C<$p-E<gt>div($q)> or short C<$p / $q> calculates the polynomial part
+of the quotient of two polynomials.  This takes the same operations
+in the coefficient space as I<divmod>.
+
+=item C<%>
+
+=item I<mod>
+
+C<$p-E<gt>mod($q)> or short C<$p % $q> calculates the remainder from
+dividing one polynomial by another.  This takes the same operations
+in the coefficient space as I<divmod>.
+
+=item I<mmod>
+
+C<$p-E<gt>mmod($q)> (modified mod) calculates the remainder from
+dividing one polynomial by another, multiplied by some constant.
+The constant is I<a**d> where I<a> is the highest coefficient of
+I<q> and I<d = degree(p) - degree(q) + 1>, if
+I<degree(p) E<gt> degree(q)>, otherwise I<1>.  This operation is
+suitable to substitute I<mod> in the Euclidean algorithm and can
+be calculated without division in the coefficient space.  For
+polynomials of degree I<m> and I<n>, I<mE<gt>=n>, this takes
+I<(m+1-n)*(m+3*n)/2> multiplications and I<(m+1-n)*n> subtractions
+in the coefficient space.
+
+=item C<**>
+
+=item I<pow>
+
+C<$p-E<gt>pow($n)> or short C<$p ** $n> calculates a power of a
+polynomial.  The exponent C<$n> must be a non-negative integer.  To
+prevent accidential excessive time and memory consumption, the
+degree of the result must be at most C<$Math::Polynomial::max_degree>,
+which is one million by default.  Calculating the I<n>-th power of
+a polynomial of degree I<m> takes I<O(m*m*n*n)> multiplications and
+additions in the coefficient space.
+
+=item I<pow_mod>
+
+C<$p1-E<gt>pow_mod($n, $p2)> is equivalent to I<($p1 ** $n) % $p2>,
+except that the modulus operation is repeatedly applied to intermediate
+results in order to keep their degrees small.  The exponent C<$n>
+must be a non-negative integer.
+
+=item I<add_const>
+
+=item I<sub_const>
+
+=item I<mul_const>
+
+=item I<div_const>
+
+The arithmetic operations C<add_const>, C<sub_const>, C<mul_const>
+and C<div_const> can be used to efficiently add a constant to or
+subtract a constant from a polynomial, or multiply or divide a
+polynomial by a constant, respectively.
+
+Overloaded arithmetic operators (I<+>, I<->, I<*>, ...) work
+with constants in place of polynomial operands, too, by converting
+non-polynomial arguments into constant polynomials first.  However,
+this usage is both less efficient and less obvious, and therefore
+not recommended.
+
+Note that there is no use for a C<mod_const> method, as polynomial
+division by a constant always yields a zero remainder.
+
+=item C<E<lt>E<lt>>
+
+=item I<shift_up>
+
+C<$p-E<gt>shift_up($n)> or short C<$p E<lt>E<lt> $n> calculates the
+product of a polynomial and a power of x.  The exponent C<$n> must
+be a non-negative integer.  To prevent accidential excessive memory
+consumption, the degree of the result must be at most
+C<$Math::Polynomial::max_degree>.
+
+=item C<E<gt>E<gt>>
+
+=item I<shift_down>
+
+C<$p-E<gt>shift_down($n)> or short C<$p E<gt>E<gt> $n> divides a
+polynomial by a power of x and returns the polynomial part of the
+result, i.e. discarding negative powers of x.  The exponent C<$n>
+must be a non-negative integer.
+
+Shifting up or down is more efficient than multiplication or division
+as it does not take any operations in the coefficient space.
+
+=item I<slice>
+
+C<$p-E<gt>slice($m, $n)> is equivalent to:
+
+  $xm = $p->make_monomial($m);
+  $xn = $p->make_monomial($n);
+  ($p / $xm) % $xn
+
+I.e., it returns a polynomial built from a slice of the coefficients
+of the original polynomial starting with degree C<$m>, and at most
+C<$n> coefficients.   However, it is more efficient than division
+and modulo as it does not perform any operations in the coefficient
+space.  The indexes C<$m> and C<$n> must be non-negative integers.
+
+=item I<monize>
+
+C<$p-E<gt>monize> converts an arbitrary nonzero polynomial to a
+monic polynomial via division by its highest-order coefficient.
+The result will be monic, i.e. with a highest-order coefficient of
+one, if the invocant was not the zero polynomial, otherwise the
+zero polynomial.  Monization of a nonzero polynomial of degree I<n>
+takes I<n> divisions in the coefficient space.
 
 =back
+
+=head2 Miscellaneous Operators
+
+=over 4
+
+=item I<nest>
+
+C<$p1-E<gt>nest($p2)> calculates the nested polynomial I<p1(p2(x))>
+from two polynomials I<p1(x)> and I<p2(x)>.  For polynomials of
+degree I<m> and I<n> this takes I<O(m*m*n*n)> multiplications and
+additions in the coefficient space.  The result will be a polynomial
+of degree I<m*n> if neither of the polynomials is a zero polynomial,
+otherwise a constant or zero polynomial.
+
+=item I<gcd>
+
+C<$p1-E<gt>gcd($p2, $mod)> calculates a greatest common divisor of
+two polynomials, using the Euclidean algorithm and the modulus
+operator as specified by name.  The C<$mod> parameter is optional
+and defaults to C<'mod'>.  With polynomials of degree I<m> and I<n>,
+I<mE<gt>=n>, and the default modulus operator I<mod>, this takes
+at most I<n> polynomial divisions of decreasing degrees or I<O(m+n)>
+divisions and I<O(m*n)> multiplications and subtractions in the
+coefficient space.  With the I<mmod> operator, this takes I<O(m*n)>
+multiplications and subtractions in the coefficient space.
+
+I<mmod> can have advantages over I<mod> in situations where division
+in the coefficient space is much more expensive than multiplication.
+
+=item I<xgcd>
+
+C<($d, $d1, $d2, $m1, $m2) = $p1-E<gt>xgcd($p2)> calculates a
+greatest common divisor I<d> and four polynomials I<d1>, I<d2>,
+I<m1>, I<m2>, such that I<d = p1*d1 + p2*d2>, I<0 = p1*m1 + p2*m2>,
+I<degree(m1*d) = degree(p2)>, I<degree(m2*d) = degree(p1)>, using
+the extended Euclidean algorithm.  With polynomials of degree I<m>
+and I<n>, I<mE<gt>=n>, this takes at most I<n> polynomial divisions
+and I<2*n> polynomial multiplications and subtractions of decreasing
+degrees, or, in the coefficient space: I<O(m+n)> divisions and
+I<O(m*n)> multiplications and subtractions.
+
+=back
+
+=head2 Calculus Operators
+
+Calculus operators as presented here are meaningful mostly on
+the coefficient space of real numbers.  In particular, they require
+that coefficients can be multiplied and divided by integer numbers.
+
+=over 4
+
+=item I<differentiate>
+
+If the coefficient space allows multiplication by Perl integers,
+C<$p-E<gt>differentiate> calculates the first derivative of a
+polynomial.  For a polynomial of degree I<n>, this takes I<n>
+multiplications in the coefficient space.
+
+=item I<integrate>
+
+If the coefficient space allows division by Perl integers,
+C<$p-E<gt>integrate> calculates an antiderivative of a polynomial.
+The coefficient of degree zero of the result will be zero.
+C<$p-E<gt>integrate($c)> does the same but adds the constant C<$c>.
+For a polynomial of degree I<n>, both forms of integration take
+I<n+1> divisions in the coefficient space.
+
+=item I<definite_integral>
+
+If the coefficient space allows division by Perl integers,
+C<$p-E<gt>definite_integral($x1, $x2)> calculates the value of the
+definite integral from C<$x1> to C<$x2> over the polynomial function
+given by C<$p>.  For real numbers I<x1 E<lt> x2>, this can be
+interpreted as the signed area bound by the lines I<x=x1>, I<y=0>,
+I<x=x2> and the graph of I<p(x)>, where parts below the x-axis are
+regarded as negative.
+
+For a polynomial of degree I<n>, this takes I<n+1> divisions, I<2*n>
+multiplications, I<2*n> additions and I<1> subtraction in the
+coefficient space.  If you need to calculate more than one definite
+integral over the same polynomial function, it is more efficient
+to store an antiderivative once (see L</integrate>) and evaluate it
+at the different interval limits.  The statement...
+
+  $a = $p->definite_integral($x1, $x2);
+
+... is essentially equivalent to:
+
+  $p_int = $p->integrate;
+  $a     = $p_int->evaluate($x2) - $p_int->evaluate($x1);
+
+=back
+
+=head2 String Representation
+
+=over 4
+
+=item C<"">
+
+=item I<as_string>
+
+In string context, Math::Polynomial objects will automatically be
+converted to a character string, which is the same as the result
+of the I<as_string()> method when called without parameter.
+
+An optional configuration hashref controls many layout aspects of the
+string representation.  In the absence of an explicit configuration,
+a per-object default configuration is used, and in the absence of that,
+a global default configuration (see I<string_config>).
+
+Each individual configuration setting has a default value as defined
+in the next section.
+
+=item I<string_config>
+
+C<$p-E<gt>string_config($hashref)> sets the per-object default
+stringification configuration to C<$hashref>.  C<$hashref> may
+be B<undef> to remove a previously set configuration.
+
+C<$p-E<gt>string_config> returns the per-object default stringification
+configuration as a reference to a hash, if present, otherwise undef.
+
+C<Math::Polynomial-E<gt>string_config($hashref)> sets the
+global default stringification configuration to C<$hashref>.
+C<Math::Polynomial-E<gt>string_config> returns that configuration.
+It should always refer to an existing hash, which may of course
+be empty.
+
+A per-object configuration will be propagated to any new objects created
+from an object.  Thus it is easy to use consistent settings without
+having to touch global parameters.
+
+=back
+
+=head2 Stringification Configuration Options
+
+=over 4
+
+=item ascending
+
+True value: order coefficients from lowest to highest degree;
+False value (default): from highest to lowest.
+
+=item with_variable
+
+True value (default): display coefficients together with powers of
+the variable; false value: display coefficients alone.  False implies
+that I<fold_zero>, I<times>, I<power> and I<variable> will have no
+effect.
+
+=item fold_sign
+
+True value: contract the addition symbol and the sign of a negative
+value to a single subtraction symbol; false value (default): do not
+carry out this kind of replacement.  True is only allowed if the
+coefficient space defines a "less than" operator.
+
+=item fold_zero
+
+True value (default): suppress terms with coefficients equal to
+zero; false value: do not suppress any terms.  Zero polynomials
+are represented with a zero constant term in any case.
+
+=item fold_one
+
+True value (default): suppress coefficients equal to one when
+multiplied by a variable power; false value: do not suppress factors
+of one.  Note that coefficients very close but not quite equal to
+one might be stringified to one without being caught by this rule.
+
+=item fold_exp_zero
+
+True value (default): suppress the variable and the zero exponent
+in the constant term; false value: display even the constant term
+with a variable power.
+
+=item fold_exp_one
+
+True value (default): suppress the exponent in the term of the
+variable to the power of one; false value: display even the linear
+term with an exponent.
+
+=item convert_coeff
+
+Code reference specifying a function that takes a coefficient value
+and returns a string representing that value.  Default is ordinary
+stringification.
+
+=item plus
+
+Addition symbol to put between terms.  Default is a plus character
+surrounded by blanks.
+
+=item minus
+
+Subtraction symbol replacing a plus symbol and a negative sign, if
+applicable (see I<fold_sign>).  Default is a minus character
+surrounded by blanks.
+
+=item leading_plus
+
+Sign symbol to put before the first term unless I<fold_sign> is
+true and the term is negative.  Default is an empty string.
+
+=item leading_minus
+
+Sign symbol replacing a negative sign at the first term, if
+I<fold_sign> is true.  Default is a minus followed by a blank.
+
+=item times
+
+Multiplication symbol to put between the coefficient and the variable
+in each term.  Default is a blank.
+
+=item power
+
+Exponentiation symbol to put between the variable and the exponent
+in each term.  Default is a caret (C<^>).
+
+=item variable
+
+Symbol representing the variable.  Default is a lower case x.
+
+=item prefix
+
+Prefix to prepend to the entire polynomial.  Default is a left
+parenthesis.
+
+=item suffix
+
+Suffix to append to the entire polynomial.  Default is a right
+parenthesis.
+
+=back
+
+=head1 EXTENSION REQUIREMENTS
+
+Math::Polynomial can be extended in different ways.  Subclasses may
+restrict coefficient spaces to facilitate certain algorithms such
+as numerical root ex TODO
+
+Special polynomials (such as Legendre, Hermite, Laguerre polynomials
+etc.) may be provided by packages offering just some constructors
+for them but no separate classes.  TODO Special algorithms dealing
+with or employing polynomials, such as for finding roots, finding
+polynomial approximations for other functions etc. may be provided
+by packages TODO
 
 =head1 DIAGNOSTICS
 
-Division and modulus operators as well as quotrem() will die on zero
-polynomials as right hand operand.
+Currently, Math::Polynomial does not thoroughly check coefficient
+values for sanity.  Incompatible coefficients might trigger warnings
+or error messages from the coefficient class implementation, blaming
+Math::Polynomial to operate on incompatible operands.  Unwisely
+chosen coefficient objects, lacking overrides for arithmetic
+operations, might even silently be used with their memory address
+acting as an integer value.
 
-The coeff() method will die on exponents outside the range from zero up to
-the current internal size of the coefficient vector minus one.  The range
-of allowed exponents will always include the polynomial degree, though.
+Some types of wrong usage, however, are diagnosed and will trigger
+one of the error messages listed below.  All of them terminate
+program execution unless they are trapped in an eval block.
 
-All other methods are supposed to always be successful.
+=over 4
 
-=head1 CAVEATS
+=item array context required
 
-Most methods do not actively check their parameters.  Arithmetic is
-carried out using Perl's builtin numeric data types and therefore prone
-to rounding errors and occasional floating point exceptions.
+A method designed to return more than one value, like I<divmod> or
+I<xgcd>, was not called in array context.  The results of these
+methods have to be assigned to a list of values rather than a single
+value.
+
+=item array context required if called without argument
+
+The I<coeff> method was called without arguments, so as to return
+a list of coefficients, but not in array context.  The list of
+coefficients should be assigned to an array.  To retrieve a single
+coefficient, I<coeff> should be called with a degree argument.
+
+=item bad modulus operator
+
+A modulus operator was passed to I<gcd> which turned out to violate
+rules required by such an operator, like constraints on the degree
+of returned polynomials.
+
+=item division by zero
+
+The I<div_const> method was called with a zero argument.  Coefficient
+spaces are supposed to not allow division by zero, therefore
+Math::Polynomial tries to safeguard against it.
+
+=item division by zero polynomial
+
+Some kind of polynomial division, like I<div>, I<mod>, I<divmod>
+or an expression with C</> or C<%> was attempted with a zero
+polynomial acting as denominator.  Division by a zero polynomial
+is not defined.
+
+=item exponent too large
+
+One of the methods I<pow>, I<shift_up>, I<make_monomial> or
+I<new_monomial> was called with arguments that would lead to a
+result with an excessively high degree.  You can tweak the class
+variable I<$max_degree> to change the actual limit.  Calculations
+involving large polynomials can consume a lot of memory and CPU
+time.  Exponent sanity checks help to avoid that from happening by
+accident.
+
+=item no such method: %s
+
+A modulus operator name was passed to I<gcd> which is not actually
+the name of a method.
+
+=item non-negative integer argument expected
+
+One of the methods expecting non-negative integer arguments, like
+I<pow>, I<shift_up>, I<shift_down>, I<slice>, I<make_monomial> or
+I<new_monomial>, got something else instead.
+
+=item object method invoked on a non-reference
+
+An object method, like I<make>, I<make_monomial> or I<interpolate>,
+was called as if it was a class method.  These methods should be
+invoked using the I<instance_variable>-E<gt>I<method_name> syntax.
+Class methods with similar functionality are available in most
+cases, as documented in the section on class methods.
+
+=item usage: %s
+
+A method designed to be called in a certain manner with certain types
+of arguments got not what it expected.
+
+For example, I<interpolate> takes two references of arrays of equal
+length.
+
+Usage messages give an example of the expected calling syntax.
+
+=item wrong operand type
+
+An arithmetic expression used an operation not defined for polynomials,
+such as a power with a polynomial exponent.
+
+=item x values not disjoint
+
+One of the Lagrange interpolation methods (I<interpolated> or
+I<interpolate>) was called with at least two equal x-values.  Support
+points for this kind of interpolation must have distinct x-values.
+
+=back
 
 =head1 SEE ALSO
 
-Pages in category I<Polynomials> of Wikipedia.
+=over 4
 
-=head1 AUTHORS
+=item Part of this distribution
 
-Currently maintained by Martin Becker E<lt>becker-cpan-mp@cozap.comE<gt>.
+  Math::Polynomial::Generic
 
-Originally written by Mats Kindahl E<lt>mats@kindahl.netE<gt>.
+=item Planned for release
 
-=head1 COPYRIGHT AND LICENCE
+  Math::Polynomial::Legendre
+  Math::Polynomial::Chebyshev
+  Math::Polynomial::Gegenbauer
+  Math::Polynomial::Jacobi
+  Math::Polynomial::Hermite
+  Math::Polynomial::Laguerre
+  Math::Polynomial::Roots::DurandKerner
 
-Copyright (c) 2007 Martin Becker E<lt>becker-cpan-mp@cozap.comE<gt>.
-All rights reserved.
+=back
 
-This module is free software; you can redistribute it and/or
-modify it under the same terms as Perl itself.  See L<perlartistic>.
+=head1 AUTHOR
+
+Martin Becker, E<lt>becker-cpan-mp@cozap.comE<gt>
+
+=head1 ACKNOWLEDGEMENTS
+
+Mats Kindahl, E<lt>mats@kindahl.netE<gt>, wrote an earlier version
+of this module and maintained it 1997-2007.
+
+=head1 LICENSE AND COPYRIGHT
+
+Copyright (c) 2007-2009 by Martin Becker.  All rights reserved.
+
+This library is free software; you can redistribute it and/or modify
+it under the same terms as Perl itself, either Perl version 5.6 or,
+at your option, any later version of Perl 5 you may have available.
+
+=head1 DISCLAIMER OF WARRANTY
 
 This module is distributed in the hope that it will be useful,
 but without any warranty; without even the implied warranty of
 merchantability or fitness for a particular purpose.
 
 =cut
-
-1;
