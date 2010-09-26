@@ -1,6 +1,6 @@
 --- #YAML:1.0
 name:               Math-Polynomial
-version:            1.003
+version:            1.004
 abstract:           Perl class for polynomials in one variable
 author:
     - Martin Becker <becker-cpan-mp@cozap.com>
