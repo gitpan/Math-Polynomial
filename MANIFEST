@@ -33,5 +33,6 @@ t/95_versions.t
 t/99_signature.t
 t/data/KNOWN_VERSIONS
 t/lib/Test/MyUtils.pm
-META.yml                                 Module meta-data (added by MakeMaker)
+META.yml                                 Module YAML meta-data (added by MakeMaker)
+META.json                                Module JSON meta-data (added by MakeMaker)
 SIGNATURE                                Public-key signature (added by MakeMaker)

@@ -1,5 +1,5 @@
 This file contains message digests of all files listed in MANIFEST,
-signed via the Module::Signature module, version 0.66.
+signed via the Module::Signature module, version 0.68.
 
 To verify the content in this distribution, first make sure you have
 Module::Signature installed, then type:
@@ -14,25 +14,26 @@ not run its Makefile.PL or Build.PL.
 -----BEGIN PGP SIGNED MESSAGE-----
 Hash: SHA1
 
-SHA1 78f8f3011a9be4a178e64a8b4b22a9ab7c9b94ce Changes
-SHA1 c367340e047eecbb4ed2a4589ce266bed6f298c8 MANIFEST
-SHA1 cfd414bfc1223cfb98753b4a5fbfd051e0725d93 META.yml
+SHA1 5175182caa83f1986ce52fb07b2a53b5b2a4dec8 Changes
+SHA1 bc1ab4abcfb65635f0cf318c51db7b0e64530358 MANIFEST
+SHA1 9a04938ae2c6ba849da8d407b359c9be71dcef82 META.json
+SHA1 fc2d5b1b84bcb63906c1413d0cfdbf30f473f6c5 META.yml
 SHA1 1f7dceeb2005122e512f5d59e1cfeb2a0024b6e5 Makefile.PL
-SHA1 8397d16431c66faf4fa68a36bb070088c653c128 README
+SHA1 c003c23cebf57cee7e2fa451a517e3da0f248e03 README
 SHA1 d971933fd7b74051f653cefcc97dce646745b610 examples/horner.pl
 SHA1 798d909a4baeccd562cff2059fe768e491957923 examples/legendre.pl
 SHA1 a3664cd521de232905fb24a09b3e1f36e208a807 examples/migration.pl
 SHA1 34158a4d16aa16bac4e9c5867ea660c826599b54 examples/runge.pl
 SHA1 ab329ccf238b1f08d0e62009e44be6681184cef0 examples/runge_plot.png
 SHA1 d48075507094d84c457dc832bed391997f58ae0e examples/symbolic.pl
-SHA1 4f3c5d98cc5c48fde40c97cf78c5e341879c4e15 lib/Math/Polynomial.pm
+SHA1 30fbc3e3ebb7b83912b83c4d1a5d0620a03260d6 lib/Math/Polynomial.pm
 SHA1 218ce2d2639f8b514cdcb10cfc98836e0e75b75f lib/Math/Polynomial/Generic.pm
 SHA1 1c32c9e70acce2afb94287df8fee32ef2070bffc t/01_load.t
 SHA1 671c011b4a914e34a9bdb1e8437a051065b4002e t/02_basics.t
 SHA1 8e529ddd77b8474316e3e77d41bd3b1a5f3d1961 t/03_expressions.t
 SHA1 8399def50acf0ab4e0694e201d3daeef880008dd t/04_lagrange.t
 SHA1 ba11c68a24555cbc404ccdc04ce53ec02b05373b t/05_euclid.t
-SHA1 f8554339d69b86c6ae78e108e7c8e2949999a641 t/06_calculus.t
+SHA1 3280a66fa29d8a953a6686897dbc6ac757293243 t/06_calculus.t
 SHA1 953a4fa31a9aad282274c83d027759993d9d163e t/07_strings.t
 SHA1 f3777e2023973b8278881bc605efaf0dad7eaef4 t/08_generic.t
 SHA1 634f585cd4e4ae107bd2d4dfde28d936173ded21 t/09_linear_terms.t
@@ -41,23 +42,23 @@ SHA1 de4ab16db56ddc507cf76ab49ab2d97fcc5ac2f6 t/11_math_bigrat.t
 SHA1 4a390f0bbf3bf32d2f3799b26eb9c32c0ebd9c1b t/12_gf3.t
 SHA1 112889310b3499aeadc8ba49d9e1264693d102b2 t/13_trees.t
 SHA1 9377a77c303366532e8f520d2703e656bc961e20 t/14_math_modint.t
-SHA1 e62ec498e4be36cbfe742dfb2a566c7dc3a55089 t/90_pod.t
+SHA1 12ee5eb7013598c45007b488ade9b94f146d5c7e t/90_pod.t
 SHA1 ad38da5ad6631c4fae1a1ea3e38850d36fceb53e t/91_pod_cover.t
-SHA1 15dd8f02e19cc92b333b480ba27910c2ee068ffb t/92_consistency.t
-SHA1 2565e39cecc2176bc4566de9d3c258659075919a t/93_examples.t
+SHA1 86761e785951183ecf9ebd2ca166f1bb42462912 t/92_consistency.t
+SHA1 ae1c513eda8e690f86ca3c3dbb0f3b50e8800cc5 t/93_examples.t
 SHA1 89727a981f36c21d0651e0cf8f2436524d8dfe80 t/94_diag_cover.t
-SHA1 9326f88c7946af4ae77d9f645c8df643fb239802 t/95_versions.t
-SHA1 bfba8dcbe715d3e6753f70522d6bfe9f3c29063e t/99_signature.t
-SHA1 a9f98cd187f8df55c703a7f3308fad01d718df2e t/data/KNOWN_VERSIONS
-SHA1 e97393093aa6bec97cc4a6b0d3e09a455f1337ad t/lib/Test/MyUtils.pm
+SHA1 9d254fd028ddd23486cf1008106f10322b668571 t/95_versions.t
+SHA1 1496e251e89201034ae1c6519408983a31f2ae5b t/99_signature.t
+SHA1 13f43b9059478c0db5c72b7d42f3dfcd242c38fd t/data/KNOWN_VERSIONS
+SHA1 4dcc41a9060f0eb6a4b321f925883b7bd55bbbd6 t/lib/Test/MyUtils.pm
 -----BEGIN PGP SIGNATURE-----
-Version: GnuPG v1.4.10 (Darwin)
+Version: GnuPG v1.4.11 (Darwin)
 
-iQEcBAEBAgAGBQJMn5z0AAoJEGH3bZuRPycNBH8H/jFhn9Xfvav+dZztXmit35pS
-gHEWBjWvV3bgq88u9+qiUu9diDwOYaytj6RuBtUExR6dzt2pm3nSo8OcX8Vvx/wK
-tbSlvidXTsIXr03HmBulzNXmQhpHPPGH3qWYt3+ocoZp55nCKMDEj9portPvHJxR
-RZb3rw2Odwk7hbcOAG84M/4r5O1J1sXX2kgA8nJt/zIEA83PHA4xl45Ki7E4JaCO
-s1PZfUg4ne2x1NUogBWuQe9LKNgMXgKTnpL0GLmZSkmlCXJKyqkUXZ+8yR1DCdfi
-jfosknbzZnaaScomd91f2xGEHIp9hZTPiXB4BF5geaX9C8me4l5XLkhfIhs7tOU=
-=LKRu
+iQEcBAEBAgAGBQJQX2FHAAoJEGH3bZuRPycNXkwIALRhmUpCpzM49GXYhOpfGuir
+AGkaRA9PosAeTv7jjdoLjQN1WwM82jPqvfwse6s/4j4FMXU96o8/iNyYZhgcdQ1s
+pqiTfadHOpXmj7fcRmDc0Yqu09DNnpVuasIdvjB1Ynw8HN4awb9+hdLRGlCEIu+y
+uJbQYnIyNFbYo26kaZmOtMGLA1U/0/esURHgkaSfGsgHsjFEBXfI+CAmdeBqlaX1
+Y35KCIGe6ENhMf3BueMsn7sek+sSYOHxC7iWgbCmlMKG/n2dY0Jl0JwDSlm7AEPL
+3WPzpOCtOV//yUAxe/YVu8jD/GqLFBQsLz+ypAla3fmm2fI6W+Jqo3+qRyTGaME=
+=iJq+
 -----END PGP SIGNATURE-----
