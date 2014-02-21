@@ -1,5 +1,5 @@
 This file contains message digests of all files listed in MANIFEST,
-signed via the Module::Signature module, version 0.68.
+signed via the Module::Signature module, version 0.70.
 
 To verify the content in this distribution, first make sure you have
 Module::Signature installed, then type:
@@ -14,19 +14,19 @@ not run its Makefile.PL or Build.PL.
 -----BEGIN PGP SIGNED MESSAGE-----
 Hash: SHA1
 
-SHA1 5175182caa83f1986ce52fb07b2a53b5b2a4dec8 Changes
-SHA1 bc1ab4abcfb65635f0cf318c51db7b0e64530358 MANIFEST
-SHA1 9a04938ae2c6ba849da8d407b359c9be71dcef82 META.json
-SHA1 fc2d5b1b84bcb63906c1413d0cfdbf30f473f6c5 META.yml
+SHA1 9b3c3c5860d2a025bcd5970b94e8075134ecca9f Changes
+SHA1 5cb46c5c483356db936c005ace50f5079b398338 MANIFEST
+SHA1 0f0e14148c0ce6d6870a34925406945d3dae91e8 META.json
+SHA1 676ec1bc2bbfb4e61de9b94b0726c4cafc34bc42 META.yml
 SHA1 1f7dceeb2005122e512f5d59e1cfeb2a0024b6e5 Makefile.PL
-SHA1 c003c23cebf57cee7e2fa451a517e3da0f248e03 README
+SHA1 cf0bf4b54159081754516431b28a64ae40f95420 README
 SHA1 d971933fd7b74051f653cefcc97dce646745b610 examples/horner.pl
 SHA1 798d909a4baeccd562cff2059fe768e491957923 examples/legendre.pl
 SHA1 a3664cd521de232905fb24a09b3e1f36e208a807 examples/migration.pl
 SHA1 34158a4d16aa16bac4e9c5867ea660c826599b54 examples/runge.pl
 SHA1 ab329ccf238b1f08d0e62009e44be6681184cef0 examples/runge_plot.png
 SHA1 d48075507094d84c457dc832bed391997f58ae0e examples/symbolic.pl
-SHA1 30fbc3e3ebb7b83912b83c4d1a5d0620a03260d6 lib/Math/Polynomial.pm
+SHA1 158fad20beab3de7c7e447dc8232c289eb4bcd4b lib/Math/Polynomial.pm
 SHA1 218ce2d2639f8b514cdcb10cfc98836e0e75b75f lib/Math/Polynomial/Generic.pm
 SHA1 1c32c9e70acce2afb94287df8fee32ef2070bffc t/01_load.t
 SHA1 671c011b4a914e34a9bdb1e8437a051065b4002e t/02_basics.t
@@ -43,22 +43,22 @@ SHA1 4a390f0bbf3bf32d2f3799b26eb9c32c0ebd9c1b t/12_gf3.t
 SHA1 112889310b3499aeadc8ba49d9e1264693d102b2 t/13_trees.t
 SHA1 9377a77c303366532e8f520d2703e656bc961e20 t/14_math_modint.t
 SHA1 12ee5eb7013598c45007b488ade9b94f146d5c7e t/90_pod.t
-SHA1 ad38da5ad6631c4fae1a1ea3e38850d36fceb53e t/91_pod_cover.t
-SHA1 86761e785951183ecf9ebd2ca166f1bb42462912 t/92_consistency.t
-SHA1 ae1c513eda8e690f86ca3c3dbb0f3b50e8800cc5 t/93_examples.t
+SHA1 c28ebf0fa25e9cb7a8fbbbf5ae78dc39952f607a t/91_pod_cover_cp.t
+SHA1 39bee74c1e5d601a788e6975376a7314c39ab803 t/92_consistency.t
+SHA1 690c222221fa956f136f5277ef82ce96eb4b682b t/93_examples.t
 SHA1 89727a981f36c21d0651e0cf8f2436524d8dfe80 t/94_diag_cover.t
-SHA1 9d254fd028ddd23486cf1008106f10322b668571 t/95_versions.t
+SHA1 1d5d8e199564f6d9baeadfef7ffef02a3b464f48 t/95_versions.t
 SHA1 1496e251e89201034ae1c6519408983a31f2ae5b t/99_signature.t
-SHA1 13f43b9059478c0db5c72b7d42f3dfcd242c38fd t/data/KNOWN_VERSIONS
-SHA1 4dcc41a9060f0eb6a4b321f925883b7bd55bbbd6 t/lib/Test/MyUtils.pm
+SHA1 463e0699e78a04baa6d9ccd8b52545860a1c07db t/data/KNOWN_VERSIONS
+SHA1 8360ca9f7fe25c200be597a49880efc57973d562 t/lib/Test/MyUtils.pm
 -----BEGIN PGP SIGNATURE-----
-Version: GnuPG v1.4.11 (Darwin)
+Version: GnuPG v1.4.14 (Darwin)
 
-iQEcBAEBAgAGBQJQX2FHAAoJEGH3bZuRPycNXkwIALRhmUpCpzM49GXYhOpfGuir
-AGkaRA9PosAeTv7jjdoLjQN1WwM82jPqvfwse6s/4j4FMXU96o8/iNyYZhgcdQ1s
-pqiTfadHOpXmj7fcRmDc0Yqu09DNnpVuasIdvjB1Ynw8HN4awb9+hdLRGlCEIu+y
-uJbQYnIyNFbYo26kaZmOtMGLA1U/0/esURHgkaSfGsgHsjFEBXfI+CAmdeBqlaX1
-Y35KCIGe6ENhMf3BueMsn7sek+sSYOHxC7iWgbCmlMKG/n2dY0Jl0JwDSlm7AEPL
-3WPzpOCtOV//yUAxe/YVu8jD/GqLFBQsLz+ypAla3fmm2fI6W+Jqo3+qRyTGaME=
-=iJq+
+iQEcBAEBAgAGBQJTB4X6AAoJEGH3bZuRPycNB10IALrkiAlTLNaH0EEKG81QL5p9
+HO+Z+kpcVVNTkaPLhuHi6nh3JBYjRRZqrk9yN+YLS/nVOp0yk/nIW1o5RKM10oa6
+ipys4N2KIWeni7osSBQMq+65bNzzXXsuznG8ehiC8yTUMxhGNoHcWYdyDaJsdJnu
+mHD5HmkkJm2iKPyIdlnupZ3o/LGoT3gOtmX7/r69LzbbjlMSuuVzf2DXl/YeOSUN
+ad6ER1G7cWqurbREj/iGRTtlAfssu/nq03ohtDPEuVGt79Eenw9pdeGSubBGQxZG
+YcziRG/HKjzXscgNVUJB6j7y6QpfWKevWVLp5B50EbJLI8vOOmWBjU0y8aW7C4M=
+=+Z5Z
 -----END PGP SIGNATURE-----
